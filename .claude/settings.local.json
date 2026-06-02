@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-ChildItem *)",
+      "Bash(mkdir -p \"C:\\\\Users\\\\waqar\\\\Desktop\\\\attendance-portal\\\\frontend\\\\src\\\\api\")",
+      "Bash(mkdir -p \"C:\\\\Users\\\\waqar\\\\Desktop\\\\attendance-portal\\\\frontend\\\\src\\\\context\")",
+      "Bash(mkdir -p \"C:\\\\Users\\\\waqar\\\\Desktop\\\\attendance-portal\\\\frontend\\\\src\\\\components\")",
+      "Bash(mkdir -p \"C:\\\\Users\\\\waqar\\\\Desktop\\\\attendance-portal\\\\frontend\\\\src\\\\pages\")",
+      "Bash(mkdir -p \"C:\\\\Users\\\\waqar\\\\Desktop\\\\attendance-portal\\\\backend\\\\middleware\")",
+      "Bash(mkdir -p \"C:\\\\Users\\\\waqar\\\\Desktop\\\\attendance-portal\\\\backend\\\\routes\")",
+      "Bash(mkdir -p \"C:\\\\Users\\\\waqar\\\\Desktop\\\\attendance-portal\\\\backend\\\\data\")",
+      "Bash(npm install *)",
+      "Bash(npm --version)",
+      "Bash(npx prebuild-install *)",
+      "Bash(node -e \"const d=require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\); const p=JSON.parse\\(d\\); console.log\\('version:', p.version, 'binary:', JSON.stringify\\(p.binary\\)\\)\")",
+      "Bash(node *)",
+      "Bash(dir /s /b \"C:\\\\Users\\\\waqar\\\\Desktop\\\\attendance-portal\\\\frontend\\\\src\")",
+      "Bash(npm run *)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\waqar\\\\Desktop\\\\attendance-portal\\\\backend\" -Recurse | Where-Object { !$_.PSIsContainer } | Select-Object FullName | Format-Table -AutoSize)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\waqar\\\\Desktop\\\\attendance-portal\\\\frontend\\\\src\" -Recurse | Where-Object { !$_.PSIsContainer } | Select-Object FullName | Format-Table -AutoSize)",
+      "PowerShell(Start-Process -FilePath \"node\" -ArgumentList \"server.js\" -WorkingDirectory \"C:\\\\Users\\\\waqar\\\\Desktop\\\\attendance-portal\\\\backend\" -PassThru | Select-Object -ExpandProperty Id)",
+      "PowerShell(Start-Sleep -Seconds 2; Invoke-RestMethod -Uri \"http://localhost:5000/api/health\" -Method GET)",
+      "PowerShell(Invoke-RestMethod -Uri \"http://localhost:5000/api/auth/login\" -Method POST -ContentType \"application/json\" -Body '{\"email\":\"trainer@institute.com\",\"password\":\"trainer123\"}')",
+      "PowerShell(Stop-Process *)",
+      "PowerShell(Start-Process -FilePath \"cmd\" -ArgumentList \"/c\", \"cd /d C:\\\\Users\\\\waqar\\\\Desktop\\\\attendance-portal\\\\frontend && npm run dev\" -PassThru | Select-Object -ExpandProperty Id)",
+      "PowerShell(Start-Sleep -Seconds 5; try { Invoke-RestMethod \"http://localhost:5000/api/health\" } catch { \"backend not ready\" }; try { $r = Invoke-WebRequest \"http://localhost:3000\" -UseBasicParsing -TimeoutSec 5; \"frontend ready: $\\($r.StatusCode\\)\" } catch { \"frontend not ready yet\" })",
+      "PowerShell(New-Item *)",
+      "Bash(git init *)",
+      "Bash(git add *)"
+    ]
+  }
+}
