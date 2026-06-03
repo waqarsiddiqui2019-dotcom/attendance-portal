@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import {
   ChevronRight, UserPlus, Trash2, Calendar, Users, BarChart3, X, Loader2,
   CheckCircle, XCircle, Clock, FileText, Download, AlertCircle, BookOpen,
-  Plus, Edit2, ArrowUp, ArrowDown, Shuffle, Wifi, Building2, GripVertical,
+  Plus, Edit2, ArrowUp, ArrowDown, Shuffle, Wifi, Building2,
 } from 'lucide-react'
 import { format, parseISO, addDays } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -13,8 +13,9 @@ import * as XLSX from 'xlsx'
 import {
   getBatch, getStudents, addStudent, removeStudent,
   getAttendanceByDate, markAttendance, getAttendanceSummary,
-  getSyllabus, saveSyllabus, distributeTopics,
+  getSyllabus, saveSyllabus, distributeTopics, getTopics,
 } from '../api/index.js'
+import SmartPlanner from '../components/SmartPlanner.jsx'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const TABS = [
@@ -478,6 +479,8 @@ export default function BatchDetail() {
 
   const [summary, setSummary] = useState([])
   const [summaryLoading, setSummaryLoading] = useState(false)
+  const [plannerOpen, setPlannerOpen] = useState(false)
+  const [calendarTopics, setCalendarTopics] = useState([])
 
   const fetchBatch = useCallback(async () => {
     try {
@@ -489,6 +492,13 @@ export default function BatchDetail() {
   }, [id])
 
   useEffect(() => { fetchBatch() }, [fetchBatch])
+
+  useEffect(() => {
+    // Load calendar topics for progress bar
+    getTopics(id)
+      .then(res => setCalendarTopics(res.data.topics || []))
+      .catch(() => {})
+  }, [id])
 
   useEffect(() => {
     if (activeTab === 'reports') {
@@ -609,11 +619,34 @@ export default function BatchDetail() {
               )}
             </div>
           </div>
-          <Link to={`/trainer/calendar/${id}`}
-            className="flex items-center gap-2 bg-primary-light hover:bg-primary text-primary hover:text-white text-sm font-medium px-4 py-2 rounded-xl transition">
-            <Calendar size={15} /> View Calendar
-          </Link>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setPlannerOpen(true)}
+              className="flex items-center gap-2 bg-[#1B3A6B] hover:bg-[#163058] text-white text-sm font-medium px-4 py-2 rounded-xl transition">
+              <Shuffle size={15} /> Smart Planner
+            </button>
+            <Link to={`/trainer/calendar/${id}`}
+              className="flex items-center gap-2 bg-primary-light hover:bg-primary text-primary hover:text-white text-sm font-medium px-4 py-2 rounded-xl transition">
+              <Calendar size={15} /> View Calendar
+            </Link>
+          </div>
         </div>
+        {/* Progress bar */}
+        {calendarTopics.length > 0 && (() => {
+          const nonRev = calendarTopics.filter(t => !t.is_revision)
+          const covered = nonRev.filter(t => t.completion_status === 'covered').length
+          const pct = Math.round((covered / nonRev.length) * 100)
+          return (
+            <div className="mt-4 pt-4 border-t border-slate-100">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-semibold text-slate-600">Syllabus Progress</span>
+                <span className="text-xs font-bold text-slate-700">{covered} of {nonRev.length} topics covered ({pct}%)</span>
+              </div>
+              <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-full bg-emerald-500 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+              </div>
+            </div>
+          )
+        })()}
       </div>
 
       {/* Tabs */}
@@ -800,6 +833,16 @@ export default function BatchDetail() {
       )}
 
       <AddStudentModal open={addModal} onClose={() => setAddModal(false)} onSubmit={handleAddStudent} loading={addLoading} />
+
+      {plannerOpen && (
+        <SmartPlanner
+          initialBatchId={id}
+          onClose={() => setPlannerOpen(false)}
+          onSuccess={() => {
+            getTopics(id).then(res => setCalendarTopics(res.data.topics || [])).catch(() => {})
+          }}
+        />
+      )}
     </>
   )
 }

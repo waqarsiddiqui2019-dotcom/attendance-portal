@@ -55,11 +55,23 @@ if (!batchCols.includes('class_days')) {
   console.log('[DB] Added class_days column to batches');
 }
 
-// ── Migrate: add mode to topics ───────────────────────────────────────────
+// ── Migrate: add columns to topics ───────────────────────────────────────
 const topicCols = db.prepare('PRAGMA table_info(topics)').all().map(c => c.name);
 if (!topicCols.includes('mode')) {
   db.exec(`ALTER TABLE topics ADD COLUMN mode TEXT`);
-  console.log('[DB] Added mode column to topics');
+  console.log('[DB] Added mode to topics');
+}
+if (!topicCols.includes('duration_hours')) {
+  db.exec(`ALTER TABLE topics ADD COLUMN duration_hours REAL DEFAULT 1`);
+  console.log('[DB] Added duration_hours to topics');
+}
+if (!topicCols.includes('completion_status')) {
+  db.exec(`ALTER TABLE topics ADD COLUMN completion_status TEXT DEFAULT 'pending'`);
+  console.log('[DB] Added completion_status to topics');
+}
+if (!topicCols.includes('is_revision')) {
+  db.exec(`ALTER TABLE topics ADD COLUMN is_revision INTEGER DEFAULT 0`);
+  console.log('[DB] Added is_revision to topics');
 }
 
 // ── Create tables (fresh install) ─────────────────────────────────────────
@@ -122,6 +134,27 @@ db.exec(`
     created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE CASCADE,
     UNIQUE(batch_id, date)
+  );
+
+  CREATE TABLE IF NOT EXISTS topic_sets (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    trainer_id  INTEGER NOT NULL,
+    name        TEXT NOT NULL,
+    description TEXT,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (trainer_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS topic_set_items (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    set_id         INTEGER NOT NULL,
+    order_index    INTEGER NOT NULL DEFAULT 0,
+    title          TEXT NOT NULL,
+    description    TEXT,
+    duration_hours REAL DEFAULT 1,
+    mode           TEXT NOT NULL DEFAULT 'offline',
+    created_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (set_id) REFERENCES topic_sets(id) ON DELETE CASCADE
   );
 
   CREATE TABLE IF NOT EXISTS syllabus_topics (

@@ -7,6 +7,7 @@ const studentRoutes = require('./routes/students');
 const attendanceRoutes = require('./routes/attendance');
 const ownerRoutes = require('./routes/owner');
 const topicsRoutes = require('./routes/topics');
+const topicSetsRoutes = require('./routes/topic-sets');
 
 const app = express();
 const PORT = 5000;
@@ -22,6 +23,7 @@ app.use('/api/students', studentRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/owner', ownerRoutes);
 app.use('/api/topics', topicsRoutes);
+app.use('/api/topic-sets', topicSetsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

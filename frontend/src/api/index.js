@@ -108,3 +108,14 @@ export const saveSyllabus = (batchId, topics) =>
 
 export const distributeTopics = (batchId, assignments) =>
   api.post(`/topics/batch/${batchId}/distribute`, { assignments })
+
+export const toggleTopicComplete = (batchId, date) =>
+  api.patch(`/topics/batch/${batchId}/date/${date}/toggle-complete`)
+
+// ── Topic Sets (Library) ──────────────────────────────────────────────────────
+export const getTopicSets = () => api.get('/topic-sets')
+export const createTopicSet = (data) => api.post('/topic-sets', data)
+export const updateTopicSet = (id, data) => api.put(`/topic-sets/${id}`, data)
+export const deleteTopicSet = (id) => api.delete(`/topic-sets/${id}`)
+export const getTopicSetItems = (id) => api.get(`/topic-sets/${id}/items`)
+export const saveTopicSetItems = (id, items) => api.post(`/topic-sets/${id}/items`, { items })

@@ -118,32 +118,51 @@ router.post('/batch/:batchId/syllabus', (req, res) => {
   }
 });
 
-// POST /api/topics/batch/:batchId/distribute — save distributed topics to calendar
+// POST /api/topics/batch/:batchId/distribute
 router.post('/batch/:batchId/distribute', (req, res) => {
   try {
     if (req.user.role !== 'trainer') return res.status(403).json({ error: 'Trainers only' });
     const batch = getBatchForTrainer(req.params.batchId, req.user.id);
     if (!batch) return res.status(404).json({ error: 'Batch not found' });
 
-    const { assignments } = req.body; // [{date, title, notes, mode}]
+    const { assignments } = req.body;
     if (!Array.isArray(assignments) || assignments.length === 0) {
       return res.status(400).json({ error: 'assignments array required' });
     }
 
-    const del = db.prepare('DELETE FROM topics WHERE batch_id = ?');
-    const ins = db.prepare(
-      'INSERT INTO topics (batch_id, date, title, notes, mode) VALUES (?, ?, ?, ?, ?)'
-    );
+    const del = db.prepare('DELETE FROM topics WHERE batch_id=?');
+    const ins = db.prepare(`
+      INSERT INTO topics (batch_id, date, title, notes, mode, duration_hours, is_revision, completion_status)
+      VALUES (?,?,?,?,?,?,?,?)
+    `);
     db.transaction(() => {
       del.run(batch.id);
       for (const a of assignments) {
-        ins.run(batch.id, a.date, a.title, a.notes || null, a.mode || null);
+        ins.run(batch.id, a.date, a.title, a.notes || null, a.mode || null,
+                a.duration_hours || null, a.is_revision ? 1 : 0, 'pending');
       }
     })();
-
-    return res.json({ message: 'Topics distributed to calendar', count: assignments.length });
+    return res.json({ message: 'Distributed', count: assignments.length });
   } catch (err) {
     console.error('Distribute error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PATCH /api/topics/batch/:batchId/date/:date/toggle-complete
+router.patch('/batch/:batchId/date/:date/toggle-complete', (req, res) => {
+  try {
+    if (req.user.role !== 'trainer') return res.status(403).json({ error: 'Trainers only' });
+    const batch = getBatchForTrainer(req.params.batchId, req.user.id);
+    if (!batch) return res.status(404).json({ error: 'Batch not found' });
+    const topic = db.prepare('SELECT * FROM topics WHERE batch_id=? AND date=?').get(batch.id, req.params.date);
+    if (!topic) return res.status(404).json({ error: 'Topic not found' });
+    const newStatus = topic.completion_status === 'covered' ? 'pending' : 'covered';
+    db.prepare('UPDATE topics SET completion_status=? WHERE batch_id=? AND date=?')
+      .run(newStatus, batch.id, req.params.date);
+    return res.json({ date: req.params.date, completion_status: newStatus });
+  } catch (err) {
+    console.error(err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

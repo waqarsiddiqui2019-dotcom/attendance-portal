@@ -4,11 +4,12 @@ import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import {
   ArrowLeft, X, CheckCircle, XCircle, Clock, Loader2,
-  BookOpen, Plus, Edit2, Trash2, Save, ChevronDown, ChevronUp
+  BookOpen, Plus, Edit2, Trash2, Save, ChevronDown, ChevronUp,
+  RotateCcw,
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import toast from 'react-hot-toast'
-import { getBatch, getCalendarData, getTopics, saveTopic, deleteTopic } from '../api/index.js'
+import { getBatch, getCalendarData, getTopics, saveTopic, deleteTopic, toggleTopicComplete } from '../api/index.js'
 
 // ── Topic form (inline, reused in modal and list) ──────────────────────────
 function TopicForm({ initialTitle = '', initialNotes = '', onSave, onCancel, saving }) {
@@ -91,15 +92,22 @@ export default function AttendanceCalendar() {
     const map = {}
     topics.forEach(t => { map[t.date] = t })
     setTopicsMap(map)
-    setTopicEvents(topics.map(t => ({
-      id: `topic-${t.date}`,
-      title: `${t.mode === 'online' ? '💻' : '🏫'} ${t.title}`,
-      start: t.date,
-      backgroundColor: '#1B3A6B',
-      borderColor: '#163058',
-      textColor: '#ffffff',
-      extendedProps: { type: 'topic', date: t.date, topicData: t },
-    })))
+    setTopicEvents(topics.map(t => {
+      const isRev = t.is_revision === 1 || t.is_revision === true
+      const isCovered = t.completion_status === 'covered'
+      const bg = isRev ? '#7C3AED' : isCovered ? '#059669' : '#1B3A6B'
+      const border = isRev ? '#6D28D9' : isCovered ? '#047857' : '#163058'
+      const prefix = isRev ? '📝' : t.mode === 'online' ? '💻' : '🏫'
+      return {
+        id: `topic-${t.date}`,
+        title: `${prefix} ${t.title}`,
+        start: t.date,
+        backgroundColor: bg,
+        borderColor: border,
+        textColor: '#ffffff',
+        extendedProps: { type: 'topic', date: t.date, topicData: t },
+      }
+    }))
   }, [])
 
   const fetchCalendar = useCallback(async (month) => {
@@ -209,6 +217,18 @@ export default function AttendanceCalendar() {
     }
   }
 
+  // ── Completion toggle ──────────────────────────────────────────────────────
+  const handleToggleComplete = async () => {
+    try {
+      const res = await toggleTopicComplete(batchId, dayModal.date)
+      const newStatus = res.data.completion_status
+      await Promise.all([fetchTopicsForMonth(currentMonth), fetchAllTopics()])
+      setDayModal(prev => ({ ...prev, topic: { ...prev.topic, completion_status: newStatus } }))
+    } catch {
+      toast.error('Failed to update status')
+    }
+  }
+
   // ── Topics list actions ────────────────────────────────────────────────────
   const handleListAdd = async (title, notes) => {
     if (!addDate) { toast.error('Please select a date'); return }
@@ -281,7 +301,9 @@ export default function AttendanceCalendar() {
           { color: '#10B981', label: '100% Present' },
           { color: '#F43F5E', label: 'Has Absences' },
           { color: '#F59E0B', label: 'Has Late Arrivals' },
-          { color: '#1B3A6B', label: 'Topic Recorded' },
+          { color: '#1B3A6B', label: 'Topic (Pending)' },
+          { color: '#059669', label: 'Topic (Covered)' },
+          { color: '#7C3AED', label: 'Revision Session' },
         ].map(({ color, label }) => (
           <div key={label} className="flex items-center gap-2">
             <div className="w-3.5 h-3.5 rounded-sm" style={{ backgroundColor: color }} />
@@ -511,20 +533,48 @@ export default function AttendanceCalendar() {
                   saving={modalSaving}
                 />
               ) : dayModal.topic ? (
-                <div className="bg-[#1B3A6B]/5 border border-[#1B3A6B]/15 rounded-xl p-4">
+                <div className={`border rounded-xl p-4 ${
+                  dayModal.topic.is_revision ? 'bg-purple-50 border-purple-200'
+                  : dayModal.topic.completion_status === 'covered' ? 'bg-emerald-50 border-emerald-200'
+                  : 'bg-[#1B3A6B]/5 border-[#1B3A6B]/15'
+                }`}>
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="flex items-center gap-2 min-w-0">
-                      <BookOpen size={14} className="text-[#1B3A6B] flex-shrink-0" />
-                      <p className="font-semibold text-[#1B3A6B] text-sm">{dayModal.topic.title}</p>
+                      <BookOpen size={14} className={`flex-shrink-0 ${dayModal.topic.is_revision ? 'text-purple-600' : dayModal.topic.completion_status === 'covered' ? 'text-emerald-600' : 'text-[#1B3A6B]'}`} />
+                      <p className={`font-semibold text-sm ${dayModal.topic.is_revision ? 'text-purple-800' : dayModal.topic.completion_status === 'covered' ? 'text-emerald-800' : 'text-[#1B3A6B]'}`}>
+                        {dayModal.topic.title}
+                      </p>
                     </div>
-                    {dayModal.topic.mode && (
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${dayModal.topic.mode === 'online' ? 'bg-brand-blue-light text-brand-blue' : 'bg-slate-100 text-slate-600'}`}>
-                        {dayModal.topic.mode === 'online' ? '💻 Online' : '🏫 Offline'}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      {dayModal.topic.mode && !dayModal.topic.is_revision && (
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${dayModal.topic.mode === 'online' ? 'bg-brand-blue-light text-brand-blue' : 'bg-slate-100 text-slate-600'}`}>
+                          {dayModal.topic.mode === 'online' ? '💻 Online' : '🏫 Offline'}
+                        </span>
+                      )}
+                      {dayModal.topic.is_revision && (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">📝 Revision</span>
+                      )}
+                    </div>
                   </div>
+                  {dayModal.topic.duration_hours && (
+                    <p className="text-xs text-slate-500 pl-5 mb-1 flex items-center gap-1">
+                      <Clock size={11} /> {dayModal.topic.duration_hours}h
+                    </p>
+                  )}
                   {dayModal.topic.notes && (
-                    <p className="text-xs text-slate-600 leading-relaxed pl-5">{dayModal.topic.notes}</p>
+                    <p className="text-xs text-slate-600 leading-relaxed pl-5 mb-3">{dayModal.topic.notes}</p>
+                  )}
+                  {!dayModal.topic.is_revision && !modalEditing && (
+                    <button onClick={handleToggleComplete}
+                      className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition ${
+                        dayModal.topic.completion_status === 'covered'
+                          ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                          : 'bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'
+                      }`}>
+                      {dayModal.topic.completion_status === 'covered'
+                        ? <><CheckCircle size={12} /> Covered ✓</>
+                        : <><RotateCcw size={12} /> Mark as Covered</>}
+                    </button>
                   )}
                 </div>
               ) : (

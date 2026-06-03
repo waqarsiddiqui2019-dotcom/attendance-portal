@@ -1,11 +1,12 @@
 import React, { useState } from 'react'
 import { NavLink, useNavigate, Outlet } from 'react-router-dom'
-import { LayoutDashboard, BookOpen, LogOut, Menu, X } from 'lucide-react'
+import { LayoutDashboard, BookOpen, Library, LogOut, Menu, X } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 
 const navItems = [
-  { to: '/trainer/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/trainer/batches',   icon: BookOpen,         label: 'My Batches' },
+  { to: '/trainer/dashboard',       icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/trainer/batches',         icon: BookOpen,        label: 'My Batches' },
+  { to: '/trainer/topics-library',  icon: Library,         label: 'Topics Library' },
 ]
 
 export default function TrainerLayout() {

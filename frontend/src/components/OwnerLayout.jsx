@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { NavLink, useNavigate, Outlet } from 'react-router-dom'
-import { LayoutDashboard, Users, BookOpen, LogOut, Menu, X } from 'lucide-react'
+import { LayoutDashboard, Users, BookOpen, Library, LogOut, Menu, X } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { getOwnerStats } from '../api/index.js'
 
@@ -19,9 +19,10 @@ export default function OwnerLayout() {
   const handleLogout = () => { logout(); navigate('/login') }
 
   const navItems = [
-    { to: '/owner/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { to: '/owner/team',      icon: Users,           label: 'Team',    badge: pendingCount },
-    { to: '/owner/batches',   icon: BookOpen,        label: 'All Batches' },
+    { to: '/owner/dashboard',       icon: LayoutDashboard, label: 'Dashboard' },
+    { to: '/owner/team',            icon: Users,           label: 'Team',         badge: pendingCount },
+    { to: '/owner/batches',         icon: BookOpen,        label: 'All Batches' },
+    { to: '/owner/topics-library',  icon: Library,         label: 'Topics Library' },
   ]
 
   const SidebarContent = () => (
