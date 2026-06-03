@@ -5,6 +5,7 @@ const authRoutes = require('./routes/auth');
 const batchRoutes = require('./routes/batches');
 const studentRoutes = require('./routes/students');
 const attendanceRoutes = require('./routes/attendance');
+const ownerRoutes = require('./routes/owner');
 
 const app = express();
 const PORT = 5000;
@@ -18,6 +19,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/batches', batchRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/attendance', attendanceRoutes);
+app.use('/api/owner', ownerRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

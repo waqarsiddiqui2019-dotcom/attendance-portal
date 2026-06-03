@@ -165,7 +165,7 @@ export default function StudentDashboard() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-32">
-        <div className="w-10 h-10 border-4 border-[#7C3AED] border-t-transparent rounded-full animate-spin" />
+        <div className="w-10 h-10 border-4 border-brand-blue border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
@@ -191,7 +191,7 @@ export default function StudentDashboard() {
           <select
             value={selectedBatchId}
             onChange={(e) => setSelectedBatchId(e.target.value)}
-            className="w-full sm:w-80 px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/30 focus:border-[#7C3AED] bg-white transition"
+            className="w-full sm:w-80 px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white transition"
           >
             {batches.map((b) => (
               <option key={b.id} value={b.id}>
@@ -205,7 +205,7 @@ export default function StudentDashboard() {
       {batches.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 bg-white rounded-2xl border border-slate-200">
           <div className="w-16 h-16 bg-violet-50 rounded-2xl flex items-center justify-center mb-4">
-            <BookOpen className="w-8 h-8 text-[#7C3AED]" />
+            <BookOpen className="w-8 h-8 text-brand-blue" />
           </div>
           <h3 className="text-lg font-semibold text-slate-700 mb-2">
             Not enrolled in any batch
@@ -275,12 +275,12 @@ export default function StudentDashboard() {
           {/* Calendar */}
           {attendanceLoading ? (
             <div className="bg-white rounded-2xl border border-slate-200 p-10 flex items-center justify-center mb-6">
-              <Loader2 className="w-7 h-7 text-[#7C3AED] animate-spin" />
+              <Loader2 className="w-7 h-7 text-brand-blue animate-spin" />
             </div>
           ) : (
             <div className="bg-white rounded-2xl border border-slate-200 p-5 mb-6">
               <h2 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                <CalendarDays size={17} className="text-[#7C3AED]" />
+                <CalendarDays size={17} className="text-brand-blue" />
                 Attendance Calendar
               </h2>
               <FullCalendar
@@ -307,7 +307,7 @@ export default function StudentDashboard() {
 
             {attendanceLoading ? (
               <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-6 h-6 text-[#7C3AED] animate-spin" />
+                <Loader2 className="w-6 h-6 text-brand-blue animate-spin" />
               </div>
             ) : attendance.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16">

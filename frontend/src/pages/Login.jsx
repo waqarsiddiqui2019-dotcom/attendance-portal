@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Eye, EyeOff, Mail, Lock, CheckCircle, GraduationCap } from 'lucide-react'
+import { useNavigate, Link } from 'react-router-dom'
+import { Eye, EyeOff, Mail, Lock, CheckCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '../context/AuthContext.jsx'
 
@@ -22,13 +22,11 @@ export default function Login() {
     try {
       const user = await login(email, password)
       toast.success(`Welcome back, ${user.name}!`)
-      if (user.role === 'trainer') {
-        navigate('/trainer/dashboard')
-      } else {
-        navigate('/student/dashboard')
-      }
+      if (user.role === 'owner')        navigate('/owner/dashboard')
+      else if (user.role === 'trainer') navigate('/trainer/dashboard')
+      else                              navigate('/student/dashboard')
     } catch (err) {
-      const msg = err.response?.data?.message || 'Invalid credentials'
+      const msg = err.response?.data?.message || 'Invalid email or password'
       toast.error(msg)
     } finally {
       setLoading(false)
@@ -37,73 +35,80 @@ export default function Login() {
 
   const features = [
     'Track attendance across all batches in real-time',
-    'Generate detailed reports & export to PDF/Excel',
-    'Visual calendar view for attendance analytics',
+    'Generate detailed reports & export to PDF / Excel',
+    'Visual calendar view for full attendance history',
   ]
 
   return (
     <div className="min-h-screen flex">
-      {/* Left decorative panel */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-[#4F46E5] via-[#6D28D9] to-[#7C3AED] flex-col justify-between p-12 relative overflow-hidden">
-        {/* Background decoration */}
-        <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
-          <div className="absolute -top-24 -left-24 w-96 h-96 bg-white/5 rounded-full" />
-          <div className="absolute top-1/2 -right-32 w-80 h-80 bg-white/5 rounded-full" />
-          <div className="absolute -bottom-20 left-1/3 w-64 h-64 bg-white/5 rounded-full" />
-        </div>
+      {/* ── Left panel ────────────────────────────────────────────────── */}
+      <div
+        className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12 relative overflow-hidden"
+        style={{ background: 'linear-gradient(135deg, #1B3A6B 0%, #2272B9 60%, #1A5C99 100%)' }}
+      >
+        {/* Decorative circles */}
+        <div className="absolute -top-28 -left-28 w-96 h-96 bg-white/5 rounded-full pointer-events-none" />
+        <div className="absolute top-1/2 -right-36 w-80 h-80 bg-white/5 rounded-full pointer-events-none" />
+        <div className="absolute -bottom-24 left-1/3 w-64 h-64 bg-[#F5A623]/10 rounded-full pointer-events-none" />
 
-        {/* Content */}
+        {/* Logo */}
         <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-16">
-            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-              <GraduationCap className="w-6 h-6 text-white" />
-            </div>
-            <span className="text-white font-bold text-xl">AttendancePro</span>
+          <div className="bg-white rounded-2xl px-8 py-5 inline-flex items-center mb-12 shadow-lg">
+            <img
+              src="/DD_Logo_.png"
+              alt="Define Digital"
+              className="h-16 w-auto"
+            />
           </div>
 
           <h1 className="text-4xl font-bold text-white leading-tight mb-4">
-            Smart Attendance
-            <br />
-            <span className="text-indigo-200">Management</span>
-            <br />
-            for Modern Institutes
+            Attendance Portal
           </h1>
-          <p className="text-indigo-200 text-lg leading-relaxed mb-10">
-            Streamline your batch management and attendance tracking with
-            powerful analytics and reporting tools.
+          <p className="text-blue-200 text-lg leading-relaxed mb-10">
+            Manage your batches, track student attendance, and generate
+            reports — all in one place.
           </p>
 
           <div className="space-y-4">
             {features.map((feature, i) => (
               <div key={i} className="flex items-start gap-3">
-                <div className="w-5 h-5 rounded-full bg-emerald-400/20 flex items-center justify-center mt-0.5 flex-shrink-0">
-                  <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                <div className="w-5 h-5 rounded-full bg-[#F5A623]/20 flex items-center justify-center mt-0.5 flex-shrink-0">
+                  <CheckCircle className="w-3.5 h-3.5 text-[#F5A623]" />
                 </div>
-                <p className="text-indigo-100 text-sm leading-relaxed">{feature}</p>
+                <p className="text-blue-100 text-sm leading-relaxed">{feature}</p>
               </div>
             ))}
           </div>
         </div>
 
+        {/* Footer */}
         <div className="relative z-10">
-          <p className="text-indigo-300 text-sm">
-            &copy; {new Date().getFullYear()} AttendancePro. All rights reserved.
-          </p>
+          <div className="border-t border-white/20 pt-6 flex items-center gap-3">
+            <img
+              src="/DD_Logo_.png"
+              alt="Define Digital"
+              className="h-6 w-auto opacity-70"
+            />
+            <p className="text-blue-300 text-xs">
+              &copy; {new Date().getFullYear()} Define Digital. All rights reserved.
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* Right form panel */}
+      {/* ── Right form panel ──────────────────────────────────────────── */}
       <div className="flex-1 flex items-center justify-center p-6 bg-gray-50">
         <div className="w-full max-w-md">
+
           {/* Mobile logo */}
-          <div className="flex items-center gap-2 mb-8 lg:hidden">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <GraduationCap className="w-5 h-5 text-white" />
+          <div className="flex justify-center mb-8 lg:hidden">
+            <div className="bg-white rounded-2xl px-6 py-3 shadow-sm border border-slate-200">
+              <img src="/DD_Logo_.png" alt="Define Digital" className="h-10 w-auto" />
             </div>
-            <span className="font-bold text-slate-800 text-lg">AttendancePro</span>
           </div>
 
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
+            {/* Heading */}
             <div className="mb-8">
               <h2 className="text-2xl font-bold text-slate-800 mb-1">
                 Welcome Back
@@ -123,7 +128,7 @@ export default function Login() {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@institute.com"
+                    placeholder="you@definedigital.com"
                     className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white placeholder:text-slate-400 transition"
                     autoComplete="email"
                   />
@@ -179,6 +184,13 @@ export default function Login() {
                 <span className="font-semibold">Trainer:</span> trainer@institute.com / trainer123
               </p>
             </div>
+
+            <p className="text-center text-sm text-slate-500 mt-5">
+              New trainer?{' '}
+              <Link to="/trainer-signup" className="text-primary font-semibold hover:text-primary-dark transition">
+                Request Access
+              </Link>
+            </p>
           </div>
         </div>
       </div>

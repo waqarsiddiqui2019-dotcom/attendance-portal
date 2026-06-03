@@ -1,0 +1,117 @@
+import React, { useState, useEffect } from 'react'
+import { NavLink, useNavigate, Outlet } from 'react-router-dom'
+import { LayoutDashboard, Users, BookOpen, LogOut, Menu, X } from 'lucide-react'
+import { useAuth } from '../context/AuthContext.jsx'
+import { getOwnerStats } from '../api/index.js'
+
+export default function OwnerLayout() {
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [pendingCount, setPendingCount] = useState(0)
+
+  useEffect(() => {
+    getOwnerStats()
+      .then(res => setPendingCount(res.data.pending || 0))
+      .catch(() => {})
+  }, [])
+
+  const handleLogout = () => { logout(); navigate('/login') }
+
+  const navItems = [
+    { to: '/owner/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { to: '/owner/team',      icon: Users,           label: 'Team',    badge: pendingCount },
+    { to: '/owner/batches',   icon: BookOpen,        label: 'All Batches' },
+  ]
+
+  const SidebarContent = () => (
+    <div className="flex flex-col h-full">
+      {/* Logo */}
+      <div className="px-5 py-5 border-b border-white/10">
+        <div className="bg-white rounded-xl p-3 flex items-center justify-center">
+          <img src="/DD_Logo_.png" alt="Define Digital" className="h-9 w-auto" />
+        </div>
+      </div>
+
+      {/* User info */}
+      <div className="px-5 py-4 border-b border-white/10">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm"
+            style={{ background: '#F5A623', color: '#1B3A6B' }}>
+            {user?.name?.charAt(0)?.toUpperCase() || 'O'}
+          </div>
+          <div className="min-w-0">
+            <p className="text-white font-semibold text-sm truncate">{user?.name || 'Owner'}</p>
+            <span className="inline-block text-xs px-2 py-0.5 rounded-full mt-0.5 font-bold"
+              style={{ background: '#F5A623', color: '#1B3A6B' }}>
+              Owner
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 px-3 py-4 space-y-1">
+        {navItems.map(({ to, icon: Icon, label, badge }) => (
+          <NavLink key={to} to={to} onClick={() => setSidebarOpen(false)}
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
+                isActive ? 'bg-[#F5A623] text-[#1B3A6B] shadow-sm' : 'text-blue-200 hover:bg-white/10 hover:text-white'
+              }`
+            }
+          >
+            <Icon size={18} className="flex-shrink-0" />
+            <span className="flex-1">{label}</span>
+            {badge > 0 && (
+              <span className="text-xs font-bold bg-rose-500 text-white rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0">
+                {badge}
+              </span>
+            )}
+          </NavLink>
+        ))}
+      </nav>
+
+      {/* Logout */}
+      <div className="px-3 py-4 border-t border-white/10">
+        <button onClick={handleLogout}
+          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-blue-200 hover:bg-white/10 hover:text-white transition-all">
+          <LogOut size={18} className="flex-shrink-0" />
+          Sign Out
+        </button>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="min-h-screen flex bg-gray-50">
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-20 bg-black/50 lg:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
+
+      <aside className="hidden lg:flex flex-col w-64 fixed inset-y-0 left-0 z-30 shadow-xl"
+        style={{ background: 'linear-gradient(180deg, #1B3A6B 0%, #163058 100%)' }}>
+        <SidebarContent />
+      </aside>
+
+      <aside className={`flex flex-col w-64 fixed inset-y-0 left-0 z-30 shadow-xl lg:hidden transform transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        style={{ background: 'linear-gradient(180deg, #1B3A6B 0%, #163058 100%)' }}>
+        <div className="absolute top-4 right-4">
+          <button onClick={() => setSidebarOpen(false)} className="text-white/70 hover:text-white"><X size={20} /></button>
+        </div>
+        <SidebarContent />
+      </aside>
+
+      <div className="flex-1 lg:ml-64 flex flex-col min-h-screen">
+        <header className="lg:hidden flex items-center gap-3 px-4 py-3 bg-white border-b border-slate-200 sticky top-0 z-10">
+          <button onClick={() => setSidebarOpen(true)} className="p-2 rounded-lg text-slate-600 hover:bg-slate-100">
+            <Menu size={20} />
+          </button>
+          <img src="/DD_Logo_.png" alt="Define Digital" className="h-7 w-auto" />
+        </header>
+        <main className="flex-1 p-6 lg:p-8 overflow-y-auto">
+          <Outlet />
+        </main>
+      </div>
+    </div>
+  )
+}

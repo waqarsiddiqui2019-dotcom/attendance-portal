@@ -1,18 +1,11 @@
 import React, { useState } from 'react'
 import { NavLink, useNavigate, Outlet } from 'react-router-dom'
-import {
-  LayoutDashboard,
-  BookOpen,
-  LogOut,
-  GraduationCap,
-  Menu,
-  X,
-} from 'lucide-react'
+import { LayoutDashboard, BookOpen, LogOut, Menu, X } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 
 const navItems = [
   { to: '/trainer/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/trainer/batches', icon: BookOpen, label: 'My Batches' },
+  { to: '/trainer/batches',   icon: BookOpen,         label: 'My Batches' },
 ]
 
 export default function TrainerLayout() {
@@ -28,28 +21,29 @@ export default function TrainerLayout() {
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
       {/* Logo */}
-      <div className="flex items-center gap-3 px-6 py-5 border-b border-indigo-800/40">
-        <div className="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
-          <GraduationCap className="w-5 h-5 text-white" />
+      <div className="px-5 py-5 border-b border-white/10">
+        <div className="bg-white rounded-xl p-3 flex items-center justify-center">
+          <img src="/DD_Logo_.png" alt="Define Digital" className="h-12 w-auto" />
         </div>
-        <span className="text-white font-bold text-lg tracking-tight">
-          AttendancePro
-        </span>
       </div>
 
       {/* User info */}
-      <div className="px-6 py-4 border-b border-indigo-800/40">
+      <div className="px-5 py-4 border-b border-white/10">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-indigo-400/30 flex items-center justify-center flex-shrink-0">
-            <span className="text-white font-semibold text-sm">
-              {user?.name?.charAt(0)?.toUpperCase() || 'T'}
-            </span>
+          <div
+            className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm text-white"
+            style={{ background: '#F5A623' }}
+          >
+            {user?.name?.charAt(0)?.toUpperCase() || 'T'}
           </div>
           <div className="min-w-0">
             <p className="text-white font-semibold text-sm truncate">
               {user?.name || 'Trainer'}
             </p>
-            <span className="inline-block text-xs bg-indigo-400/30 text-indigo-200 px-2 py-0.5 rounded-full mt-0.5">
+            <span
+              className="inline-block text-xs px-2 py-0.5 rounded-full mt-0.5 font-medium"
+              style={{ background: '#F5A623', color: '#1B3A6B' }}
+            >
               Trainer
             </span>
           </div>
@@ -66,22 +60,22 @@ export default function TrainerLayout() {
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
                 isActive
-                  ? 'bg-white text-primary shadow-sm'
-                  : 'text-indigo-200 hover:bg-white/10 hover:text-white'
+                  ? 'bg-[#F5A623] text-[#1B3A6B] shadow-sm'
+                  : 'text-blue-200 hover:bg-white/10 hover:text-white'
               }`
             }
           >
-            <Icon className="w-4.5 h-4.5 flex-shrink-0" size={18} />
+            <Icon size={18} className="flex-shrink-0" />
             {label}
           </NavLink>
         ))}
       </nav>
 
       {/* Logout */}
-      <div className="px-3 py-4 border-t border-indigo-800/40">
+      <div className="px-3 py-4 border-t border-white/10">
         <button
           onClick={handleLogout}
-          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-indigo-200 hover:bg-white/10 hover:text-white transition-all"
+          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-blue-200 hover:bg-white/10 hover:text-white transition-all"
         >
           <LogOut size={18} className="flex-shrink-0" />
           Sign Out
@@ -101,21 +95,22 @@ export default function TrainerLayout() {
       )}
 
       {/* Sidebar — desktop */}
-      <aside className="hidden lg:flex flex-col w-64 bg-gradient-to-b from-[#4F46E5] to-[#4338CA] fixed inset-y-0 left-0 z-30 shadow-xl">
+      <aside
+        className="hidden lg:flex flex-col w-64 fixed inset-y-0 left-0 z-30 shadow-xl"
+        style={{ background: 'linear-gradient(180deg, #1B3A6B 0%, #163058 100%)' }}
+      >
         <SidebarContent />
       </aside>
 
       {/* Sidebar — mobile drawer */}
       <aside
-        className={`flex flex-col w-64 bg-gradient-to-b from-[#4F46E5] to-[#4338CA] fixed inset-y-0 left-0 z-30 shadow-xl lg:hidden transform transition-transform duration-300 ${
+        className={`flex flex-col w-64 fixed inset-y-0 left-0 z-30 shadow-xl lg:hidden transform transition-transform duration-300 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
+        style={{ background: 'linear-gradient(180deg, #1B3A6B 0%, #163058 100%)' }}
       >
         <div className="absolute top-4 right-4">
-          <button
-            onClick={() => setSidebarOpen(false)}
-            className="text-white/70 hover:text-white"
-          >
+          <button onClick={() => setSidebarOpen(false)} className="text-white/70 hover:text-white">
             <X size={20} />
           </button>
         </div>
@@ -132,10 +127,7 @@ export default function TrainerLayout() {
           >
             <Menu size={20} />
           </button>
-          <div className="flex items-center gap-2">
-            <GraduationCap className="w-5 h-5 text-primary" />
-            <span className="font-bold text-slate-800">AttendancePro</span>
-          </div>
+          <img src="/DD_Logo_.png" alt="Define Digital" className="h-7 w-auto" />
         </header>
 
         <main className="flex-1 p-6 lg:p-8 overflow-y-auto">

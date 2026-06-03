@@ -39,7 +39,17 @@ export const login = (email, password) =>
 
 export const getMe = () => api.get('/auth/me')
 
+export const trainerSignup = (data) => api.post('/auth/trainer-signup', data)
+
 export const registerStudent = (data) => api.post('/auth/register-student', data)
+
+// ── Owner ─────────────────────────────────────────────────────────────────────
+export const getOwnerStats    = ()       => api.get('/owner/stats')
+export const getOwnerTrainers = ()       => api.get('/owner/trainers')
+export const approveTrainer   = (id)     => api.put(`/owner/trainers/${id}/approve`)
+export const rejectTrainer    = (id)     => api.put(`/owner/trainers/${id}/reject`)
+export const deleteTrainer    = (id)     => api.delete(`/owner/trainers/${id}`)
+export const getOwnerBatches  = ()       => api.get('/owner/batches')
 
 // ── Batches ───────────────────────────────────────────────────────────────────
 export const getBatches = () => api.get('/batches')

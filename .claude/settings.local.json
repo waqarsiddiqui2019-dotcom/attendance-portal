@@ -26,7 +26,9 @@
       "PowerShell(Start-Sleep -Seconds 5; try { Invoke-RestMethod \"http://localhost:5000/api/health\" } catch { \"backend not ready\" }; try { $r = Invoke-WebRequest \"http://localhost:3000\" -UseBasicParsing -TimeoutSec 5; \"frontend ready: $\\($r.StatusCode\\)\" } catch { \"frontend not ready yet\" })",
       "PowerShell(New-Item *)",
       "Bash(git init *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git config *)",
+      "Bash(git commit *)"
     ]
   }
 }

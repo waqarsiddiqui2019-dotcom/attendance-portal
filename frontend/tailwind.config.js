@@ -4,10 +4,17 @@ export default {
     extend: {
       colors: {
         primary: {
-          DEFAULT: '#4F46E5',
-          dark: '#4338CA',
-          light: '#EEF2FF',
-        }
+          DEFAULT: '#F5A623',
+          dark: '#D4891A',
+          light: '#FEF3D9',
+        },
+        brand: {
+          blue:        '#2272B9',
+          'blue-dark': '#1A5C99',
+          'blue-light':'#E8F2FC',
+          navy:        '#1B3A6B',
+          'navy-dark': '#163058',
+        },
       }
     }
   },

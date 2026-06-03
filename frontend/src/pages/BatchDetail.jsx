@@ -287,7 +287,7 @@ export default function BatchDetail() {
   const exportPDF = () => {
     const doc = new jsPDF()
     doc.setFontSize(16)
-    doc.setTextColor('#4F46E5')
+    doc.setTextColor('#1B3A6B')
     doc.text('Attendance Report', 14, 18)
     doc.setFontSize(11)
     doc.setTextColor('#64748B')
@@ -307,8 +307,8 @@ export default function BatchDetail() {
       startY: 40,
       head: [['Student', 'Present', 'Absent', 'Late', 'Total Days', '%']],
       body: rows,
-      headStyles: { fillColor: [79, 70, 229] },
-      alternateRowStyles: { fillColor: [238, 242, 255] },
+      headStyles: { fillColor: [27, 58, 107] },
+      alternateRowStyles: { fillColor: [254, 243, 217] },
       styles: { fontSize: 10, cellPadding: 4 },
     })
 

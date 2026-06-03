@@ -79,15 +79,15 @@ export default function TrainerDashboard() {
       icon: BookOpen,
       label: 'Total Batches',
       value: batches.length,
-      color: 'text-[#4F46E5]',
-      bgColor: 'bg-[#EEF2FF]',
+      color: 'text-primary',
+      bgColor: 'bg-primary-light',
     },
     {
       icon: Users,
       label: 'Total Students',
       value: totalStudents,
-      color: 'text-[#7C3AED]',
-      bgColor: 'bg-violet-50',
+      color: 'text-brand-blue',
+      bgColor: 'bg-brand-blue-light',
     },
     {
       icon: CheckCircle,
@@ -223,7 +223,7 @@ export default function TrainerDashboard() {
           </div>
 
           {/* Summary card */}
-          <div className="mt-4 bg-gradient-to-br from-[#4F46E5] to-[#7C3AED] rounded-2xl p-5 text-white">
+          <div className="mt-4 bg-gradient-to-br from-[#1B3A6B] to-[#2272B9] rounded-2xl p-5 text-white">
             <p className="text-indigo-200 text-xs font-medium uppercase tracking-wider mb-3">
               Today
             </p>
