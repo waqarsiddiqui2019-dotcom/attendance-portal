@@ -88,3 +88,13 @@ export const getAttendanceSummary = (batchId) =>
 
 export const getMyAttendance = (batchId) =>
   api.get(`/attendance/student/my-attendance/${batchId}`)
+
+// ── Topics ────────────────────────────────────────────────────────────────────
+export const getTopics = (batchId, month) =>
+  api.get(`/topics/batch/${batchId}${month ? `?month=${month}` : ''}`)
+
+export const saveTopic = (batchId, data) =>
+  api.post(`/topics/batch/${batchId}`, data)
+
+export const deleteTopic = (batchId, date) =>
+  api.delete(`/topics/batch/${batchId}/date/${date}`)

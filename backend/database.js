@@ -86,6 +86,17 @@ db.exec(`
     FOREIGN KEY (marked_by)  REFERENCES users(id),
     UNIQUE(batch_id, student_id, date)
   );
+
+  CREATE TABLE IF NOT EXISTS topics (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    batch_id    INTEGER NOT NULL,
+    date        TEXT NOT NULL,
+    title       TEXT NOT NULL,
+    notes       TEXT,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE CASCADE,
+    UNIQUE(batch_id, date)
+  );
 `);
 
 // ── Seed owner account ─────────────────────────────────────────────────────
