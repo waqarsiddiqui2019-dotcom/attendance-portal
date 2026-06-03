@@ -7,6 +7,7 @@ import {
 import { format, parseISO } from 'date-fns'
 import toast from 'react-hot-toast'
 import { getBatches, createBatch, updateBatch, deleteBatch } from '../api/index.js'
+import { showError } from '../utils/showError.jsx'
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 const MODES = [
@@ -205,7 +206,7 @@ export default function Batches() {
       setModalOpen(false)
       fetchBatches()
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to create batch')
+      showError(err, { action: 'create-batch' })
     } finally {
       setSubmitting(false)
     }
@@ -215,11 +216,11 @@ export default function Batches() {
     setSubmitting(true)
     try {
       await updateBatch(editTarget.id, toApi(form))
-      toast.success('Batch updated!')
+      toast.success('Batch updated ✅')
       setEditTarget(null)
       fetchBatches()
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to update batch')
+      showError(err, { action: 'update-batch' })
     } finally {
       setSubmitting(false)
     }
@@ -229,10 +230,10 @@ export default function Batches() {
     if (!window.confirm(`Delete "${batch.name}"? This cannot be undone.`)) return
     try {
       await deleteBatch(batch.id)
-      toast.success('Batch deleted')
+      toast.success('Batch deleted ✅')
       fetchBatches()
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to delete batch')
+      showError(err, { action: 'delete-batch' })
     }
   }
 

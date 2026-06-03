@@ -4,6 +4,7 @@ import { format, addDays, differenceInWeeks } from 'date-fns'
 import toast from 'react-hot-toast'
 import { getBatches, getTopicSets, getTopicSetItems, distributeTopics } from '../api/index.js'
 import { useAuth } from '../context/AuthContext.jsx'
+import { showError } from '../utils/showError.jsx'
 
 // ── Algorithm helpers ─────────────────────────────────────────────────────────
 const DAYS_MAP = { Sunday:0, Monday:1, Tuesday:2, Wednesday:3, Thursday:4, Friday:5, Saturday:6 }
@@ -125,7 +126,7 @@ export default function SmartPlanner({ initialBatchId, onClose, onSuccess }) {
         setBatches(bRes.data.batches || [])
         setSets(sRes.data.sets || [])
       })
-      .catch(() => toast.error('Failed to load data'))
+      .catch(err => showError(err, { action: 'load-planner-data' }))
   }, [])
 
   // Pre-fill from selected batch
@@ -145,7 +146,7 @@ export default function SmartPlanner({ initialBatchId, onClose, onSuccess }) {
     setLoadingItems(true)
     getTopicSetItems(selectedSetId)
       .then(res => setItems(res.data.items || []))
-      .catch(() => toast.error('Failed to load topics'))
+      .catch(err => showError(err, { action: 'load-topic-set-items' }))
       .finally(() => setLoadingItems(false))
   }, [selectedSetId])
 
@@ -209,11 +210,11 @@ export default function SmartPlanner({ initialBatchId, onClose, onSuccess }) {
           : d.items.reduce((s, t) => s + (t.duration_hours || 1), 0),
       }))
       await distributeTopics(selectedBatchId, assignments)
-      toast.success(`${assignments.length} sessions distributed to calendar!`)
+      toast.success(`${assignments.length} sessions distributed to calendar ✅`)
       onSuccess?.()
       onClose()
-    } catch {
-      toast.error('Distribution failed')
+    } catch (err) {
+      showError(err, { action: 'distributing-topics' })
     } finally {
       setDistributing(false)
     }

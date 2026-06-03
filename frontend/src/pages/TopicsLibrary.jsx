@@ -10,6 +10,7 @@ import {
   getTopicSetItems, saveTopicSetItems,
 } from '../api/index.js'
 import SmartPlanner from '../components/SmartPlanner.jsx'
+import { showError } from '../utils/showError.jsx'
 
 // ── Mode badge ────────────────────────────────────────────────────────────────
 function ModeBadge({ mode }) {
@@ -97,7 +98,7 @@ export default function TopicsLibrary() {
     setLoadingSets(true)
     getTopicSets()
       .then(res => { setSets(res.data.sets || []); })
-      .catch(() => toast.error('Failed to load topic sets'))
+      .catch(err => showError(err, { action: 'load-topic-sets' }))
       .finally(() => setLoadingSets(false))
   }, [])
 
@@ -106,7 +107,7 @@ export default function TopicsLibrary() {
     setLoadingItems(true)
     getTopicSetItems(setId)
       .then(res => setItems(res.data.items || []))
-      .catch(() => toast.error('Failed to load topics'))
+      .catch(err => showError(err, { action: 'load-set-items' }))
       .finally(() => setLoadingItems(false))
   }, [])
 
@@ -119,7 +120,7 @@ export default function TopicsLibrary() {
     try {
       const res = await saveTopicSetItems(selectedSetId, list)
       setItems(res.data.items || list)
-    } catch { toast.error('Failed to save topics') }
+    } catch (err) { showError(err, { action: 'save-topic-items' }) }
     finally { setSavingItems(false) }
   }
 
@@ -136,7 +137,7 @@ export default function TopicsLibrary() {
       setCreatingSet(false)
       setNewSetName(''); setNewSetDesc('')
       toast.success('Topic set created!')
-    } catch { toast.error('Failed to create set') }
+    } catch (err) { showError(err, { action: 'create-topic-set' }) }
     finally { setSavingSet(false) }
   }
 
@@ -146,7 +147,8 @@ export default function TopicsLibrary() {
       const res = await updateTopicSet(id, { name, description })
       setSets(prev => prev.map(s => s.id === id ? { ...s, ...res.data.set } : s))
       setEditingSetId(null)
-    } catch { toast.error('Failed to rename set') }
+      toast.success('Set renamed ✅')
+    } catch (err) { showError(err, { action: 'rename-topic-set' }) }
   }
 
   const handleDeleteSet = async (set) => {
@@ -155,8 +157,8 @@ export default function TopicsLibrary() {
       await deleteTopicSet(set.id)
       setSets(prev => prev.filter(s => s.id !== set.id))
       if (selectedSetId === set.id) { setSelectedSetId(null); setItems([]) }
-      toast.success('Set deleted')
-    } catch { toast.error('Failed to delete set') }
+      toast.success('Set deleted ✅')
+    } catch (err) { showError(err, { action: 'delete-topic-set' }) }
   }
 
   // ── Item handlers ─────────────────────────────────────────────────────────

@@ -1,28 +1,30 @@
 import axios from 'axios'
+import { analyzeError } from '../utils/errorAnalyzer.js'
 
 const api = axios.create({
   baseURL: '/api',
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  timeout: 15000,
+  headers: { 'Content-Type': 'application/json' },
 })
 
 // Request interceptor — attach bearer token
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('att_token')
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
+    if (token) config.headers.Authorization = `Bearer ${token}`
     return config
   },
   (error) => Promise.reject(error)
 )
 
-// Response interceptor — handle 401
+// Response interceptor — pre-analyze ALL errors so components get friendly messages
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    const page = typeof window !== 'undefined' ? window.location.pathname : ''
+    // Attach analysis so components can use error.analyzed instead of raw error
+    error.analyzed = analyzeError(error, { page })
+
     if (error.response?.status === 401) {
       localStorage.clear()
       window.location.href = '/login'

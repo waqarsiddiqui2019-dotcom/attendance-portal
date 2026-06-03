@@ -3,31 +3,40 @@ import { useNavigate, Link } from 'react-router-dom'
 import { Eye, EyeOff, Mail, Lock, CheckCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '../context/AuthContext.jsx'
+import { analyzeError } from '../utils/errorAnalyzer.js'
+import { ErrorCard } from '../utils/showError.jsx'
 
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [loginError, setLoginError] = useState(null)   // smart analyzed error
   const { login } = useAuth()
   const navigate = useNavigate()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    setLoginError(null)
     if (!email || !password) {
-      toast.error('Please fill in all fields')
+      setLoginError({
+        severity: 'warning', icon: '✏️',
+        title: 'Fields Required',
+        reason: 'Please fill in your email and password before signing in.',
+        steps: ['Enter your email address', 'Enter your password', 'Then click Sign In'],
+        actionLabel: null, actionType: null,
+      })
       return
     }
     setLoading(true)
     try {
       const user = await login(email, password)
-      toast.success(`Welcome back, ${user.name}!`)
+      toast.success(`Welcome back, ${user.name}! ✅`)
       if (user.role === 'owner')        navigate('/owner/dashboard')
       else if (user.role === 'trainer') navigate('/trainer/dashboard')
       else                              navigate('/student/dashboard')
     } catch (err) {
-      const msg = err.response?.data?.message || 'Invalid email or password'
-      toast.error(msg)
+      setLoginError(analyzeError(err, { page: '/login', action: 'login' }))
     } finally {
       setLoading(false)
     }
@@ -176,6 +185,13 @@ export default function Login() {
                 )}
               </button>
             </form>
+
+            {/* Smart error card — shows inline below submit button */}
+            {loginError && (
+              <div className="mt-4">
+                <ErrorCard analyzed={loginError} />
+              </div>
+            )}
 
             {/* Hint */}
             <div className="mt-6 p-3 bg-slate-50 rounded-xl border border-slate-200">

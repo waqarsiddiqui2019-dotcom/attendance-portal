@@ -16,6 +16,7 @@ import {
   getSyllabus, saveSyllabus, distributeTopics, getTopics,
 } from '../api/index.js'
 import SmartPlanner from '../components/SmartPlanner.jsx'
+import { showError } from '../utils/showError.jsx'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const TABS = [
@@ -514,10 +515,10 @@ export default function BatchDetail() {
     setAddLoading(true)
     try {
       await addStudent(id, form)
-      toast.success('Student added!')
+      toast.success('Student added successfully ✅')
       setAddModal(false)
       fetchBatch()
-    } catch (err) { toast.error(err.response?.data?.error || 'Failed to add student') }
+    } catch (err) { showError(err, { action: 'add-student' }) }
     finally { setAddLoading(false) }
   }
 
@@ -525,9 +526,9 @@ export default function BatchDetail() {
     if (!window.confirm(`Remove ${student.name}?`)) return
     try {
       await removeStudent(id, student.id)
-      toast.success('Student removed')
+      toast.success('Student removed ✅')
       fetchBatch()
-    } catch (err) { toast.error(err.response?.data?.error || 'Failed to remove student') }
+    } catch (err) { showError(err, { action: 'remove-student' }) }
   }
 
   const handleLoadAttendance = async () => {
@@ -540,7 +541,7 @@ export default function BatchDetail() {
       records.forEach(r => { if (r.student_id) map[r.student_id] = r.status })
       setAttendanceData(map)
       setAttendanceLoaded(true)
-    } catch { toast.error('Failed to load attendance') }
+    } catch (err) { showError(err, { action: 'load-attendance', page: window.location.pathname }) }
     finally { setLoadingAttendance(false) }
   }
 
@@ -549,8 +550,8 @@ export default function BatchDetail() {
     try {
       const records = Object.entries(attendanceData).map(([student_id, status]) => ({ student_id, status }))
       await markAttendance(id, { date: attendanceDate, records })
-      toast.success('Attendance saved!')
-    } catch { toast.error('Failed to save attendance') }
+      toast.success('Attendance saved ✅')
+    } catch (err) { showError(err, { action: 'save-attendance', page: window.location.pathname }) }
     finally { setSavingAttendance(false) }
   }
 

@@ -10,6 +10,7 @@ import {
 import { format, parseISO } from 'date-fns'
 import toast from 'react-hot-toast'
 import { getBatch, getCalendarData, getTopics, saveTopic, deleteTopic, toggleTopicComplete } from '../api/index.js'
+import { showError } from '../utils/showError.jsx'
 
 // ── Topic form (inline, reused in modal and list) ──────────────────────────
 function TopicForm({ initialTitle = '', initialNotes = '', onSave, onCancel, saving }) {
@@ -132,8 +133,8 @@ export default function AttendanceCalendar() {
         }
       })
       setEvents(mapped)
-    } catch {
-      toast.error('Failed to load calendar data')
+    } catch (err) {
+      showError(err, { action: 'load-calendar', page: window.location.pathname })
     } finally {
       setLoading(false)
     }
@@ -189,13 +190,13 @@ export default function AttendanceCalendar() {
     setModalSaving(true)
     try {
       await saveTopic(batchId, { date: dayModal.date, title, notes })
-      toast.success('Topic saved!')
+      toast.success('Topic saved ✅')
       await Promise.all([fetchTopicsForMonth(currentMonth), fetchAllTopics()])
       const newTopic = { date: dayModal.date, title, notes: notes || null }
       setDayModal(prev => ({ ...prev, topic: newTopic }))
       setModalEditing(false)
-    } catch {
-      toast.error('Failed to save topic')
+    } catch (err) {
+      showError(err, { action: 'save-topic', page: window.location.pathname })
     } finally {
       setModalSaving(false)
     }
@@ -206,12 +207,12 @@ export default function AttendanceCalendar() {
     setModalDeleting(true)
     try {
       await deleteTopic(batchId, dayModal.date)
-      toast.success('Topic removed')
+      toast.success('Topic removed ✅')
       await Promise.all([fetchTopicsForMonth(currentMonth), fetchAllTopics()])
       setDayModal(prev => ({ ...prev, topic: null }))
       setModalEditing(false)
-    } catch {
-      toast.error('Failed to delete topic')
+    } catch (err) {
+      showError(err, { action: 'delete-topic', page: window.location.pathname })
     } finally {
       setModalDeleting(false)
     }

@@ -1,7 +1,9 @@
 import React from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
+import { Toaster } from 'react-hot-toast'
 import { AuthProvider } from './context/AuthContext.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
+import ErrorBoundary from './components/ErrorBoundary.jsx'
 import TrainerLayout from './components/TrainerLayout.jsx'
 import StudentLayout from './components/StudentLayout.jsx'
 import OwnerLayout   from './components/OwnerLayout.jsx'
@@ -20,6 +22,15 @@ import TopicsLibrary      from './pages/TopicsLibrary.jsx'
 
 export default function App() {
   return (
+    <ErrorBoundary>
+    <Toaster
+      position="top-right"
+      toastOptions={{
+        style: { background: 'transparent', boxShadow: 'none', padding: 0 },
+        success: { duration: 3000, style: { background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '12px 16px', fontSize: '14px', color: '#166534', fontWeight: 600 } },
+        error:   { duration: 4000, style: { background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '12px', padding: '12px 16px', fontSize: '14px', color: '#991b1b', fontWeight: 600 } },
+      }}
+    />
     <AuthProvider>
       <Routes>
         {/* Public */}
@@ -56,5 +67,6 @@ export default function App() {
         <Route path="*"  element={<Navigate to="/login" replace />} />
       </Routes>
     </AuthProvider>
+    </ErrorBoundary>
   )
 }
