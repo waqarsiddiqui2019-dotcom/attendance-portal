@@ -93,7 +93,7 @@ export default function AttendanceCalendar() {
     setTopicsMap(map)
     setTopicEvents(topics.map(t => ({
       id: `topic-${t.date}`,
-      title: `📚 ${t.title}`,
+      title: `${t.mode === 'online' ? '💻' : '🏫'} ${t.title}`,
       start: t.date,
       backgroundColor: '#1B3A6B',
       borderColor: '#163058',
@@ -512,9 +512,16 @@ export default function AttendanceCalendar() {
                 />
               ) : dayModal.topic ? (
                 <div className="bg-[#1B3A6B]/5 border border-[#1B3A6B]/15 rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <BookOpen size={14} className="text-[#1B3A6B] flex-shrink-0" />
-                    <p className="font-semibold text-[#1B3A6B] text-sm">{dayModal.topic.title}</p>
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <BookOpen size={14} className="text-[#1B3A6B] flex-shrink-0" />
+                      <p className="font-semibold text-[#1B3A6B] text-sm">{dayModal.topic.title}</p>
+                    </div>
+                    {dayModal.topic.mode && (
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${dayModal.topic.mode === 'online' ? 'bg-brand-blue-light text-brand-blue' : 'bg-slate-100 text-slate-600'}`}>
+                        {dayModal.topic.mode === 'online' ? '💻 Online' : '🏫 Offline'}
+                      </span>
+                    )}
                   </div>
                   {dayModal.topic.notes && (
                     <p className="text-xs text-slate-600 leading-relaxed pl-5">{dayModal.topic.notes}</p>

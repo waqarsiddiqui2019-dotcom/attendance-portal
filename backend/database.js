@@ -40,6 +40,28 @@ if (usersExists) {
 
 db.pragma('foreign_keys = ON');
 
+// ── Migrate: add schedule fields to batches ───────────────────────────────
+const batchCols = db.prepare('PRAGMA table_info(batches)').all().map(c => c.name);
+if (!batchCols.includes('mode')) {
+  db.exec(`ALTER TABLE batches ADD COLUMN mode TEXT DEFAULT 'offline'`);
+  console.log('[DB] Added mode column to batches');
+}
+if (!batchCols.includes('sessions_per_week')) {
+  db.exec(`ALTER TABLE batches ADD COLUMN sessions_per_week INTEGER`);
+  console.log('[DB] Added sessions_per_week column to batches');
+}
+if (!batchCols.includes('class_days')) {
+  db.exec(`ALTER TABLE batches ADD COLUMN class_days TEXT`);
+  console.log('[DB] Added class_days column to batches');
+}
+
+// ── Migrate: add mode to topics ───────────────────────────────────────────
+const topicCols = db.prepare('PRAGMA table_info(topics)').all().map(c => c.name);
+if (!topicCols.includes('mode')) {
+  db.exec(`ALTER TABLE topics ADD COLUMN mode TEXT`);
+  console.log('[DB] Added mode column to topics');
+}
+
 // ── Create tables (fresh install) ─────────────────────────────────────────
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
@@ -53,13 +75,16 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS batches (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    name        TEXT NOT NULL,
-    description TEXT,
-    start_date  TEXT NOT NULL,
-    end_date    TEXT NOT NULL,
-    trainer_id  INTEGER NOT NULL,
-    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    name              TEXT NOT NULL,
+    description       TEXT,
+    start_date        TEXT NOT NULL,
+    end_date          TEXT NOT NULL,
+    trainer_id        INTEGER NOT NULL,
+    mode              TEXT DEFAULT 'offline',
+    sessions_per_week INTEGER,
+    class_days        TEXT,
+    created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (trainer_id) REFERENCES users(id)
   );
 
@@ -93,9 +118,21 @@ db.exec(`
     date        TEXT NOT NULL,
     title       TEXT NOT NULL,
     notes       TEXT,
+    mode        TEXT,
     created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE CASCADE,
     UNIQUE(batch_id, date)
+  );
+
+  CREATE TABLE IF NOT EXISTS syllabus_topics (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    batch_id    INTEGER NOT NULL,
+    order_index INTEGER NOT NULL DEFAULT 0,
+    title       TEXT NOT NULL,
+    description TEXT,
+    mode        TEXT NOT NULL DEFAULT 'offline',
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE CASCADE
   );
 `);
 
