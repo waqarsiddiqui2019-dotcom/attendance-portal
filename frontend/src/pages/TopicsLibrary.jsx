@@ -114,14 +114,22 @@ export default function TopicsLibrary() {
   useEffect(() => { fetchSets() }, [fetchSets])
   useEffect(() => { if (selectedSetId) fetchItems(selectedSetId) }, [selectedSetId, fetchItems])
 
-  const saveItems = async (list) => {
-    if (!selectedSetId) return
+  const saveItems = async (list, { closeAdd = false, closeEdit = false } = {}) => {
+    if (!selectedSetId) return false
     setSavingItems(true)
     try {
       const res = await saveTopicSetItems(selectedSetId, list)
       setItems(res.data.items || list)
-    } catch (err) { showError(err, { action: 'save-topic-items' }) }
-    finally { setSavingItems(false) }
+      if (closeAdd)  { setShowAddItem(false) }
+      if (closeEdit) { setEditingItemIdx(null) }
+      toast.success('Topics saved ✅')
+      return true
+    } catch (err) {
+      showError(err, { action: 'save-topic-items', page: window.location.pathname })
+      return false
+    } finally {
+      setSavingItems(false)
+    }
   }
 
   // ── Set handlers ──────────────────────────────────────────────────────────
@@ -163,15 +171,12 @@ export default function TopicsLibrary() {
 
   // ── Item handlers ─────────────────────────────────────────────────────────
   const handleAddItem = async (form) => {
-    const newList = [...items, form]
-    setShowAddItem(false)
-    await saveItems(newList)
+    // Do NOT close the form before save — wait for success
+    await saveItems([...items, form], { closeAdd: true })
   }
 
   const handleEditItem = async (idx, form) => {
-    const newList = items.map((t, i) => i === idx ? { ...t, ...form } : t)
-    setEditingItemIdx(null)
-    await saveItems(newList)
+    await saveItems(items.map((t, i) => i === idx ? { ...t, ...form } : t), { closeEdit: true })
   }
 
   const handleDeleteItem = async (idx) => {
