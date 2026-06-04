@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import {
   Library, Plus, Edit2, Trash2, ArrowUp, ArrowDown, Shuffle,
-  BookOpen, Loader2, X, Save, Wifi, Building2, Clock,
+  BookOpen, Loader2, X, Save, Wifi, Building2, Clock, AlertCircle,
+  CheckCircle, RefreshCw,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -9,154 +10,208 @@ import {
   getTopicSets, createTopicSet, updateTopicSet, deleteTopicSet,
   getTopicSetItems, saveTopicSetItems,
 } from '../api/index.js'
-import SmartPlanner from '../components/SmartPlanner.jsx'
-import { showError } from '../utils/showError.jsx'
 
-// ── Mode badge ────────────────────────────────────────────────────────────────
-function ModeBadge({ mode }) {
-  return mode === 'online'
-    ? <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-brand-blue-light text-brand-blue"><Wifi size={10} /> Online</span>
-    : <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600"><Building2 size={10} /> Offline</span>
+// ── helpers ────────────────────────────────────────────────────────────────────
+function friendlyError(err) {
+  if (!err) return 'Unknown error.'
+  if (!err.response) return 'Cannot reach the server. Make sure START-APP.bat is running and try again.'
+  const msg = err.response?.data?.error || err.response?.data?.message || ''
+  if (err.response.status === 403) return 'Access denied. Make sure you are logged in as a Trainer.'
+  if (err.response.status === 404) return 'Item not found. Refresh the page and try again.'
+  if (err.response.status === 400) return msg || 'Invalid input. Check all fields and try again.'
+  if (err.response.status >= 500) return 'Server error. Restart the app via START-APP.bat and try again.'
+  return msg || 'Something went wrong. Please try again.'
 }
 
-// ── Inline set name editor ─────────────────────────────────────────────────────
-function SetNameEditor({ set, onSave, onCancel }) {
-  const [name, setName] = useState(set.name)
-  const [desc, setDesc] = useState(set.description || '')
+// ── PageError banner ───────────────────────────────────────────────────────────
+function ErrorBanner({ message, onRetry }) {
+  if (!message) return null
   return (
-    <div className="space-y-2 p-3">
-      <input autoFocus value={name} onChange={e => setName(e.target.value)}
-        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" placeholder="Set name" />
-      <input value={desc} onChange={e => setDesc(e.target.value)}
-        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" placeholder="Description (optional)" />
-      <div className="flex gap-2">
-        <button onClick={() => onSave(name, desc)} className="flex items-center gap-1 text-xs bg-primary text-white font-semibold px-3 py-1.5 rounded-lg"><Save size={11} /> Save</button>
-        <button onClick={onCancel} className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1.5 rounded-lg hover:bg-slate-100">Cancel</button>
-      </div>
-    </div>
-  )
-}
-
-// ── Item form row (add / edit) ─────────────────────────────────────────────────
-function ItemFormRow({ initial, onSave, onCancel, saving }) {
-  const [form, setForm] = useState(initial || { title: '', description: '', duration_hours: 1, mode: 'offline' })
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
-  return (
-    <div className="grid grid-cols-[1fr_1fr_80px_90px_80px] gap-2 p-3 bg-slate-50 border-b border-slate-100 items-end">
-      <input autoFocus value={form.title} onChange={e => set('title', e.target.value)}
-        placeholder="Topic title *"
-        className="px-2.5 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" />
-      <input value={form.description} onChange={e => set('description', e.target.value)}
-        placeholder="Description"
-        className="px-2.5 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" />
-      <input type="number" step="0.5" min="0.5" value={form.duration_hours} onChange={e => set('duration_hours', e.target.value)}
-        className="px-2.5 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" />
-      <select value={form.mode} onChange={e => set('mode', e.target.value)}
-        className="px-2.5 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary">
-        <option value="offline">🏫 Offline</option>
-        <option value="online">💻 Online</option>
-      </select>
-      <div className="flex gap-1">
-        <button onClick={() => { if (!form.title.trim()) { toast.error('Title required'); return } onSave(form) }}
-          disabled={saving}
-          className="flex items-center gap-1 bg-primary text-white text-xs font-semibold px-2.5 py-2 rounded-lg disabled:opacity-50 transition">
-          {saving ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />}
+    <div className="flex items-start gap-3 bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 mb-4">
+      <AlertCircle size={16} className="text-rose-500 flex-shrink-0 mt-0.5" />
+      <p className="text-sm text-rose-700 flex-1">{message}</p>
+      {onRetry && (
+        <button onClick={onRetry} className="text-xs text-rose-600 font-semibold hover:underline flex-shrink-0">
+          Retry
         </button>
-        <button onClick={onCancel} className="text-slate-400 hover:text-slate-600 px-1.5 py-2 rounded-lg hover:bg-slate-100 transition"><X size={13} /></button>
+      )}
+    </div>
+  )
+}
+
+// ── TopicForm (add / edit inline) ──────────────────────────────────────────────
+function TopicForm({ initial, onSave, onCancel, saving }) {
+  const [title, setTitle] = useState(initial?.title || '')
+  const [desc,  setDesc]  = useState(initial?.description || '')
+  const [hours, setHours] = useState(initial?.duration_hours ?? 1)
+  const [mode,  setMode]  = useState(initial?.mode || 'offline')
+  const [err,   setErr]   = useState('')
+
+  const handleSave = () => {
+    if (!title.trim()) { setErr('Topic title is required.'); return }
+    setErr('')
+    onSave({ title: title.trim(), description: desc.trim(), duration_hours: parseFloat(hours) || 1, mode })
+  }
+
+  return (
+    <div className="bg-slate-50 border-b border-slate-200 px-4 py-4">
+      <p className="text-xs font-semibold text-slate-600 mb-3 uppercase tracking-wider">
+        {initial ? 'Edit Topic' : 'Add New Topic'}
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Title *</label>
+          <input
+            autoFocus
+            value={title}
+            onChange={e => { setTitle(e.target.value); setErr('') }}
+            placeholder="e.g. Introduction to SEO"
+            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+          />
+          {err && <p className="text-xs text-rose-600 mt-1">⚠ {err}</p>}
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Description</label>
+          <input
+            value={desc}
+            onChange={e => setDesc(e.target.value)}
+            placeholder="Brief description (optional)"
+            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Duration (hours)</label>
+          <input
+            type="number" step="0.5" min="0.5" max="12"
+            value={hours}
+            onChange={e => setHours(e.target.value)}
+            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Mode</label>
+          <select
+            value={mode}
+            onChange={e => setMode(e.target.value)}
+            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+          >
+            <option value="offline">🏫 Offline</option>
+            <option value="online">💻 Online</option>
+          </select>
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="flex items-center gap-1.5 bg-primary hover:bg-primary-dark text-white text-xs font-semibold px-4 py-2 rounded-lg disabled:opacity-50 transition"
+        >
+          {saving
+            ? <><Loader2 size={12} className="animate-spin" /> Saving...</>
+            : <><Save size={12} /> {initial ? 'Save Changes' : 'Add Topic'}</>}
+        </button>
+        <button
+          onClick={onCancel}
+          disabled={saving}
+          className="text-xs text-slate-500 hover:text-slate-700 px-3 py-2 rounded-lg hover:bg-slate-100 transition"
+        >
+          Cancel
+        </button>
       </div>
     </div>
   )
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+// ── Main page ──────────────────────────────────────────────────────────────────
 export default function TopicsLibrary() {
   const { user } = useAuth()
   const isOwner = user?.role === 'owner'
 
-  const [sets, setSets] = useState([])
+  // ── Sets state ───────────────────────────────────────────────────────────────
+  const [sets, setSets]               = useState([])
   const [loadingSets, setLoadingSets] = useState(true)
+  const [setsError, setSetsError]     = useState('')
   const [selectedSetId, setSelectedSetId] = useState(null)
-  const [items, setItems] = useState([])
+
+  // ── Items state ──────────────────────────────────────────────────────────────
+  const [items, setItems]               = useState([])
   const [loadingItems, setLoadingItems] = useState(false)
+  const [itemsError, setItemsError]     = useState('')
+  const [savingItems, setSavingItems]   = useState(false)
 
-  // Set CRUD state
+  // ── UI state ─────────────────────────────────────────────────────────────────
   const [creatingSet, setCreatingSet] = useState(false)
-  const [newSetName, setNewSetName] = useState('')
-  const [newSetDesc, setNewSetDesc] = useState('')
+  const [newSetName, setNewSetName]   = useState('')
+  const [newSetDesc, setNewSetDesc]   = useState('')
+  const [savingSet, setSavingSet]     = useState(false)
+  const [setFormError, setSetFormError] = useState('')
+
   const [editingSetId, setEditingSetId] = useState(null)
-  const [savingSet, setSavingSet] = useState(false)
 
-  // Item state
-  const [showAddItem, setShowAddItem] = useState(false)
-  const [editingItemIdx, setEditingItemIdx] = useState(null)
-  const [savingItems, setSavingItems] = useState(false)
+  const [showAddTopic, setShowAddTopic]     = useState(false)
+  const [editingTopicIdx, setEditingTopicIdx] = useState(null)
 
-  // Planner
   const [plannerOpen, setPlannerOpen] = useState(false)
 
-  const fetchSets = useCallback(() => {
+  // ── Load sets ─────────────────────────────────────────────────────────────────
+  const loadSets = useCallback(() => {
     setLoadingSets(true)
+    setSetsError('')
     getTopicSets()
-      .then(res => { setSets(res.data.sets || []); })
-      .catch(err => showError(err, { action: 'load-topic-sets' }))
+      .then(res => setSets(res.data.sets || []))
+      .catch(err => setSetsError(friendlyError(err)))
       .finally(() => setLoadingSets(false))
   }, [])
 
-  const fetchItems = useCallback((setId) => {
+  useEffect(() => { loadSets() }, [loadSets])
+
+  // ── Load items when set selected ──────────────────────────────────────────────
+  const loadItems = useCallback((setId) => {
     if (!setId) return
     setLoadingItems(true)
+    setItemsError('')
+    setShowAddTopic(false)
+    setEditingTopicIdx(null)
     getTopicSetItems(setId)
       .then(res => setItems(res.data.items || []))
-      .catch(err => showError(err, { action: 'load-set-items' }))
+      .catch(err => setItemsError(friendlyError(err)))
       .finally(() => setLoadingItems(false))
   }, [])
 
-  useEffect(() => { fetchSets() }, [fetchSets])
-  useEffect(() => { if (selectedSetId) fetchItems(selectedSetId) }, [selectedSetId, fetchItems])
+  useEffect(() => { if (selectedSetId) loadItems(selectedSetId) }, [selectedSetId, loadItems])
 
-  const saveItems = async (list, { closeAdd = false, closeEdit = false } = {}) => {
-    if (!selectedSetId) return false
-    setSavingItems(true)
-    try {
-      const res = await saveTopicSetItems(selectedSetId, list)
-      setItems(res.data.items || list)
-      if (closeAdd)  { setShowAddItem(false) }
-      if (closeEdit) { setEditingItemIdx(null) }
-      toast.success('Topics saved ✅')
-      return true
-    } catch (err) {
-      showError(err, { action: 'save-topic-items', page: window.location.pathname })
-      return false
-    } finally {
-      setSavingItems(false)
-    }
-  }
-
-  // ── Set handlers ──────────────────────────────────────────────────────────
+  // ── Set CRUD ──────────────────────────────────────────────────────────────────
   const handleCreateSet = async () => {
-    if (!newSetName.trim()) { toast.error('Set name required'); return }
+    if (!newSetName.trim()) { setSetFormError('Please enter a set name.'); return }
     setSavingSet(true)
+    setSetFormError('')
     try {
-      const res = await createTopicSet({ name: newSetName, description: newSetDesc })
-      const newSet = res.data.set
+      const res = await createTopicSet({ name: newSetName.trim(), description: newSetDesc.trim() || null })
+      const newSet = { ...res.data.set, item_count: 0 }
       setSets(prev => [newSet, ...prev])
       setSelectedSetId(newSet.id)
       setItems([])
       setCreatingSet(false)
-      setNewSetName(''); setNewSetDesc('')
-      toast.success('Topic set created!')
-    } catch (err) { showError(err, { action: 'create-topic-set' }) }
-    finally { setSavingSet(false) }
+      setNewSetName('')
+      setNewSetDesc('')
+      toast.success('Topic set created! Now add topics to it.')
+    } catch (err) {
+      setSetFormError(friendlyError(err))
+    } finally {
+      setSavingSet(false)
+    }
   }
 
-  const handleRenameSet = async (id, name, description) => {
+  const handleRenameSet = async (setId, name, description) => {
     if (!name.trim()) return
     try {
-      const res = await updateTopicSet(id, { name, description })
-      setSets(prev => prev.map(s => s.id === id ? { ...s, ...res.data.set } : s))
+      const res = await updateTopicSet(setId, { name: name.trim(), description: description?.trim() || null })
+      setSets(prev => prev.map(s => s.id === setId ? { ...s, ...res.data.set } : s))
       setEditingSetId(null)
       toast.success('Set renamed ✅')
-    } catch (err) { showError(err, { action: 'rename-topic-set' }) }
+    } catch (err) {
+      toast.error(friendlyError(err))
+    }
   }
 
   const handleDeleteSet = async (set) => {
@@ -166,44 +221,86 @@ export default function TopicsLibrary() {
       setSets(prev => prev.filter(s => s.id !== set.id))
       if (selectedSetId === set.id) { setSelectedSetId(null); setItems([]) }
       toast.success('Set deleted ✅')
-    } catch (err) { showError(err, { action: 'delete-topic-set' }) }
+    } catch (err) {
+      toast.error(friendlyError(err))
+    }
   }
 
-  // ── Item handlers ─────────────────────────────────────────────────────────
-  const handleAddItem = async (form) => {
-    // Do NOT close the form before save — wait for success
-    await saveItems([...items, form], { closeAdd: true })
+  // ── Item CRUD ─────────────────────────────────────────────────────────────────
+  const persistItems = async (list) => {
+    if (!selectedSetId) {
+      toast.error('No topic set selected. Please select a set first.')
+      return false
+    }
+    setSavingItems(true)
+    setItemsError('')
+    try {
+      const res = await saveTopicSetItems(selectedSetId, list.map(t => ({
+        title: t.title,
+        description: t.description || null,
+        duration_hours: parseFloat(t.duration_hours) || 1,
+        mode: t.mode || 'offline',
+      })))
+      const saved = res.data.items || list
+      setItems(saved)
+      // Update item count in set list
+      setSets(prev => prev.map(s =>
+        s.id === selectedSetId ? { ...s, item_count: saved.length } : s
+      ))
+      return true
+    } catch (err) {
+      const msg = friendlyError(err)
+      setItemsError(msg)
+      toast.error(msg)
+      return false
+    } finally {
+      setSavingItems(false)
+    }
   }
 
-  const handleEditItem = async (idx, form) => {
-    await saveItems(items.map((t, i) => i === idx ? { ...t, ...form } : t), { closeEdit: true })
+  const handleAddTopic = async (form) => {
+    const ok = await persistItems([...items, form])
+    if (ok) {
+      setShowAddTopic(false)
+      toast.success('Topic added ✅')
+    }
   }
 
-  const handleDeleteItem = async (idx) => {
+  const handleEditTopic = async (idx, form) => {
+    const ok = await persistItems(items.map((t, i) => i === idx ? { ...t, ...form } : t))
+    if (ok) {
+      setEditingTopicIdx(null)
+      toast.success('Topic updated ✅')
+    }
+  }
+
+  const handleDeleteTopic = async (idx) => {
     if (!window.confirm('Remove this topic?')) return
-    await saveItems(items.filter((_, i) => i !== idx))
+    const ok = await persistItems(items.filter((_, i) => i !== idx))
+    if (ok) toast.success('Topic removed ✅')
   }
 
   const handleMoveUp = async (idx) => {
     if (idx === 0) return
-    const list = [...items];
-    [list[idx-1], list[idx]] = [list[idx], list[idx-1]]
-    await saveItems(list)
+    const list = [...items]
+    ;[list[idx - 1], list[idx]] = [list[idx], list[idx - 1]]
+    await persistItems(list)
   }
 
   const handleMoveDown = async (idx) => {
     if (idx === items.length - 1) return
-    const list = [...items];
-    [list[idx], list[idx+1]] = [list[idx+1], list[idx]]
-    await saveItems(list)
+    const list = [...items]
+    ;[list[idx], list[idx + 1]] = [list[idx + 1], list[idx]]
+    await persistItems(list)
   }
 
   const selectedSet = sets.find(s => s.id === selectedSetId)
-  const totalHours = items.reduce((s, t) => s + (parseFloat(t.duration_hours) || 1), 0)
+  const totalHours  = items.reduce((sum, t) => sum + (parseFloat(t.duration_hours) || 1), 0)
 
+  // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <div>
-      {/* Page header */}
+      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-[#1B3A6B] flex items-center justify-center">
@@ -212,85 +309,128 @@ export default function TopicsLibrary() {
           <div>
             <h1 className="text-2xl font-bold text-slate-800">Topics Library</h1>
             <p className="text-slate-500 text-sm mt-0.5">
-              {isOwner ? 'View topic sets across all trainers' : 'Create reusable topic sets for your batches'}
+              {isOwner ? 'View all trainer topic sets' : 'Create and manage reusable topic sets for your batches'}
             </p>
           </div>
         </div>
         {!isOwner && (
-          <button onClick={() => setPlannerOpen(true)}
-            className="flex items-center gap-2 bg-primary hover:bg-primary-dark text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition shadow-sm shadow-primary/30">
+          <button
+            onClick={() => {
+              // Lazy-import SmartPlanner only when opened
+              setPlannerOpen(true)
+            }}
+            className="flex items-center gap-2 bg-primary hover:bg-primary-dark text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition shadow-sm shadow-primary/30"
+          >
             <Shuffle size={15} /> Smart Planner
           </button>
         )}
       </div>
 
-      <div className="flex gap-5">
-        {/* ── Left: Set List ─────────────────────────────────────────── */}
+      {/* Top-level sets error */}
+      <ErrorBanner message={setsError} onRetry={loadSets} />
+
+      <div className="flex gap-5 items-start">
+
+        {/* ── LEFT: Set list ───────────────────────────────────────────────── */}
         <div className="w-72 flex-shrink-0 space-y-2">
-          {!isOwner && (
-            <button onClick={() => setCreatingSet(true)}
-              className="flex items-center gap-2 w-full px-4 py-2.5 border-2 border-dashed border-slate-200 hover:border-primary text-slate-400 hover:text-primary rounded-xl text-sm font-medium transition">
+
+          {/* Create set button */}
+          {!isOwner && !creatingSet && (
+            <button
+              onClick={() => { setCreatingSet(true); setSetFormError('') }}
+              className="flex items-center gap-2 w-full px-4 py-2.5 border-2 border-dashed border-slate-200 hover:border-primary text-slate-400 hover:text-primary rounded-xl text-sm font-medium transition"
+            >
               <Plus size={15} /> New Topic Set
             </button>
           )}
 
           {/* Create set form */}
           {creatingSet && (
-            <div className="bg-white border border-slate-200 rounded-xl p-3 space-y-2">
-              <input autoFocus value={newSetName} onChange={e => setNewSetName(e.target.value)}
+            <div className="bg-white border border-slate-200 rounded-xl p-3 space-y-2 shadow-sm">
+              <p className="text-xs font-semibold text-slate-600">New Topic Set</p>
+              <input
+                autoFocus
+                value={newSetName}
+                onChange={e => { setNewSetName(e.target.value); setSetFormError('') }}
+                onKeyDown={e => e.key === 'Enter' && handleCreateSet()}
                 placeholder="Set name *"
-                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" />
-              <input value={newSetDesc} onChange={e => setNewSetDesc(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+              />
+              <input
+                value={newSetDesc}
+                onChange={e => setNewSetDesc(e.target.value)}
                 placeholder="Description (optional)"
-                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" />
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+              />
+              {setFormError && <p className="text-xs text-rose-600">⚠ {setFormError}</p>}
               <div className="flex gap-2">
-                <button onClick={handleCreateSet} disabled={savingSet}
-                  className="flex-1 bg-primary text-white text-xs font-semibold py-2 rounded-lg disabled:opacity-50">
-                  {savingSet ? 'Creating...' : 'Create'}
+                <button
+                  onClick={handleCreateSet}
+                  disabled={savingSet}
+                  className="flex-1 bg-primary hover:bg-primary-dark text-white text-xs font-semibold py-2 rounded-lg disabled:opacity-50 transition"
+                >
+                  {savingSet ? 'Creating...' : 'Create Set'}
                 </button>
-                <button onClick={() => { setCreatingSet(false); setNewSetName(''); setNewSetDesc('') }}
-                  className="text-xs text-slate-500 px-3 py-2 rounded-lg hover:bg-slate-100">Cancel</button>
+                <button
+                  onClick={() => { setCreatingSet(false); setNewSetName(''); setNewSetDesc(''); setSetFormError('') }}
+                  className="text-xs text-slate-500 px-3 py-2 rounded-lg hover:bg-slate-100"
+                >Cancel</button>
               </div>
             </div>
           )}
 
+          {/* Set list */}
           {loadingSets ? (
-            <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 text-primary animate-spin" /></div>
+            <div className="flex items-center justify-center py-10 gap-2 text-slate-400 text-sm">
+              <Loader2 size={16} className="animate-spin" /> Loading sets…
+            </div>
           ) : sets.length === 0 ? (
             <div className="text-center py-12 text-slate-400 text-sm">
               <Library size={28} className="mx-auto mb-2 text-slate-300" />
-              {isOwner ? 'No topic sets yet' : 'No sets yet — create your first one'}
+              {isOwner ? 'No topic sets created yet' : 'No sets yet — create your first one above'}
             </div>
           ) : (
             sets.map(set => (
               <div key={set.id}>
-                {editingSetId === set.id ? (
-                  <div className="bg-white border border-primary rounded-xl">
-                    <SetNameEditor set={set}
-                      onSave={(n, d) => handleRenameSet(set.id, n, d)}
-                      onCancel={() => setEditingSetId(null)} />
-                  </div>
+                {editingSetId === set.id && !isOwner ? (
+                  <SetNameEditor
+                    set={set}
+                    onSave={(n, d) => handleRenameSet(set.id, n, d)}
+                    onCancel={() => setEditingSetId(null)}
+                  />
                 ) : (
-                  <button onClick={() => setSelectedSetId(set.id)}
-                    className={`w-full text-left px-4 py-3 rounded-xl border transition group ${selectedSetId === set.id ? 'bg-[#1B3A6B] border-[#1B3A6B] text-white' : 'bg-white border-slate-200 hover:border-[#1B3A6B]/40'}`}>
-                    <div className="flex items-start justify-between gap-2">
+                  <button
+                    onClick={() => setSelectedSetId(set.id)}
+                    className={`w-full text-left px-4 py-3 rounded-xl border transition group ${
+                      selectedSetId === set.id
+                        ? 'bg-[#1B3A6B] border-[#1B3A6B]'
+                        : 'bg-white border-slate-200 hover:border-[#1B3A6B]/40'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-1">
                       <div className="min-w-0 flex-1">
-                        <p className={`font-semibold text-sm truncate ${selectedSetId === set.id ? 'text-white' : 'text-slate-800'}`}>{set.name}</p>
+                        <p className={`font-semibold text-sm truncate ${selectedSetId === set.id ? 'text-white' : 'text-slate-800'}`}>
+                          {set.name}
+                        </p>
                         {set.trainer_name && (
-                          <p className={`text-xs mt-0.5 ${selectedSetId === set.id ? 'text-blue-200' : 'text-slate-400'}`}>by {set.trainer_name}</p>
+                          <p className={`text-xs mt-0.5 ${selectedSetId === set.id ? 'text-blue-200' : 'text-slate-400'}`}>
+                            by {set.trainer_name}
+                          </p>
                         )}
-                        <p className={`text-xs mt-1 ${selectedSetId === set.id ? 'text-blue-200' : 'text-slate-400'}`}>{set.item_count || 0} topics</p>
+                        <p className={`text-xs mt-0.5 ${selectedSetId === set.id ? 'text-blue-200' : 'text-slate-400'}`}>
+                          {set.item_count ?? 0} topic{(set.item_count ?? 0) !== 1 ? 's' : ''}
+                        </p>
                       </div>
                       {!isOwner && (
-                        <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition">
-                          <button onClick={e => { e.stopPropagation(); setEditingSetId(set.id) }}
-                            className={`p-1 rounded ${selectedSetId === set.id ? 'hover:bg-white/20 text-white' : 'hover:bg-slate-100 text-slate-400'}`}>
-                            <Edit2 size={12} />
-                          </button>
-                          <button onClick={e => { e.stopPropagation(); handleDeleteSet(set) }}
-                            className={`p-1 rounded ${selectedSetId === set.id ? 'hover:bg-white/20 text-white' : 'hover:bg-rose-50 text-slate-300 hover:text-rose-500'}`}>
-                            <Trash2 size={12} />
-                          </button>
+                        <div className={`flex gap-0.5 opacity-0 group-hover:opacity-100 transition`}>
+                          <button
+                            onClick={e => { e.stopPropagation(); setEditingSetId(set.id) }}
+                            className={`p-1 rounded ${selectedSetId === set.id ? 'hover:bg-white/20 text-white' : 'hover:bg-slate-100 text-slate-400'}`}
+                          ><Edit2 size={11} /></button>
+                          <button
+                            onClick={e => { e.stopPropagation(); handleDeleteSet(set) }}
+                            className={`p-1 rounded ${selectedSetId === set.id ? 'hover:bg-white/20 text-white' : 'hover:bg-rose-50 text-slate-300 hover:text-rose-500'}`}
+                          ><Trash2 size={11} /></button>
                         </div>
                       )}
                     </div>
@@ -301,129 +441,220 @@ export default function TopicsLibrary() {
           )}
         </div>
 
-        {/* ── Right: Topics Table ────────────────────────────────────── */}
-        <div className="flex-1 min-w-0 bg-white rounded-2xl border border-slate-200 overflow-hidden self-start">
+        {/* ── RIGHT: Topics table ──────────────────────────────────────────── */}
+        <div className="flex-1 min-w-0 bg-white rounded-2xl border border-slate-200 overflow-hidden">
           {!selectedSetId ? (
             <div className="flex flex-col items-center justify-center py-24 text-slate-400">
-              <BookOpen size={32} className="mb-3 text-slate-300" />
-              <p className="text-sm font-medium">Select a topic set to view its topics</p>
+              <BookOpen size={36} className="mb-3 text-slate-300" />
+              <p className="text-sm font-medium">Select a topic set on the left</p>
+              {!isOwner && <p className="text-xs text-slate-400 mt-1">or create a new set to get started</p>}
             </div>
-          ) : loadingItems ? (
-            <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 text-primary animate-spin" /></div>
           ) : (
             <>
-              {/* Set header */}
+              {/* Panel header */}
               <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
                 <div>
-                  <h2 className="font-bold text-slate-800">{selectedSet?.name}</h2>
-                  {selectedSet?.description && <p className="text-xs text-slate-500 mt-0.5">{selectedSet.description}</p>}
+                  <h2 className="font-bold text-slate-800 text-base">{selectedSet?.name}</h2>
+                  {selectedSet?.description && (
+                    <p className="text-xs text-slate-500 mt-0.5">{selectedSet.description}</p>
+                  )}
                   <p className="text-xs text-slate-400 mt-1">
-                    {items.length} topics · {totalHours.toFixed(1)} hrs total
+                    {items.length} topic{items.length !== 1 ? 's' : ''} · {totalHours.toFixed(1)} hrs total
                   </p>
                 </div>
                 {!isOwner && (
                   <div className="flex items-center gap-2">
-                    <button onClick={() => setPlannerOpen(true)}
-                      className="flex items-center gap-1.5 bg-[#1B3A6B] hover:bg-[#163058] text-white text-xs font-semibold px-3.5 py-2 rounded-lg transition">
+                    <button
+                      onClick={() => setPlannerOpen(true)}
+                      className="flex items-center gap-1.5 bg-[#1B3A6B] hover:bg-[#163058] text-white text-xs font-semibold px-3.5 py-2 rounded-lg transition"
+                    >
                       <Shuffle size={12} /> Plan Batch
                     </button>
-                    <button onClick={() => { setShowAddItem(true); setEditingItemIdx(null) }}
-                      className="flex items-center gap-1.5 bg-primary hover:bg-primary-dark text-white text-xs font-semibold px-3.5 py-2 rounded-lg transition">
-                      <Plus size={12} /> Add Topic
+                    <button
+                      onClick={() => { setShowAddTopic(v => !v); setEditingTopicIdx(null) }}
+                      className={`flex items-center gap-1.5 text-white text-xs font-semibold px-3.5 py-2 rounded-lg transition ${showAddTopic ? 'bg-slate-400 hover:bg-slate-500' : 'bg-primary hover:bg-primary-dark'}`}
+                    >
+                      {showAddTopic ? <X size={12} /> : <Plus size={12} />}
+                      {showAddTopic ? 'Cancel' : 'Add Topic'}
                     </button>
                   </div>
                 )}
               </div>
 
-              {/* Column header */}
-              <div className="grid grid-cols-[40px_40px_1fr_1fr_80px_100px_70px] gap-2 px-4 py-2 bg-slate-50 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                <span>#</span><span></span><span>Title</span><span>Description</span>
-                <span>Hours</span><span>Mode</span><span className="text-right">Actions</span>
-              </div>
-
-              {/* Add item form */}
-              {showAddItem && (
-                <ItemFormRow
-                  onSave={handleAddItem}
-                  onCancel={() => setShowAddItem(false)}
-                  saving={savingItems}
-                />
+              {/* Items error */}
+              {itemsError && (
+                <div className="px-6 pt-4">
+                  <ErrorBanner message={itemsError} onRetry={() => loadItems(selectedSetId)} />
+                </div>
               )}
 
-              {items.length === 0 && !showAddItem ? (
-                <div className="flex flex-col items-center justify-center py-16">
-                  <BookOpen className="w-10 h-10 text-slate-300 mb-3" />
-                  <p className="text-slate-500 text-sm">No topics yet</p>
-                  {!isOwner && <button onClick={() => setShowAddItem(true)} className="mt-3 text-xs text-primary font-medium hover:underline">+ Add your first topic</button>}
+              {/* Loading items */}
+              {loadingItems ? (
+                <div className="flex items-center justify-center py-16 gap-2 text-slate-400 text-sm">
+                  <Loader2 size={16} className="animate-spin" /> Loading topics…
                 </div>
               ) : (
-                <div className="divide-y divide-slate-100">
-                  {items.map((item, idx) => (
-                    <div key={item.id || idx}>
-                      {editingItemIdx === idx ? (
-                        <ItemFormRow
-                          initial={item}
-                          onSave={form => handleEditItem(idx, form)}
-                          onCancel={() => setEditingItemIdx(null)}
-                          saving={savingItems}
-                        />
-                      ) : (
-                        <div className="grid grid-cols-[40px_40px_1fr_1fr_80px_100px_70px] gap-2 items-center px-4 py-3 hover:bg-slate-50/50 transition">
-                          <span className="text-xs font-bold text-slate-400">{idx + 1}</span>
-                          {!isOwner ? (
-                            <div className="flex flex-col gap-0.5">
-                              <button onClick={() => handleMoveUp(idx)} disabled={idx === 0 || savingItems}
-                                className="text-slate-300 hover:text-slate-600 disabled:opacity-20 transition"><ArrowUp size={13} /></button>
-                              <button onClick={() => handleMoveDown(idx)} disabled={idx === items.length - 1 || savingItems}
-                                className="text-slate-300 hover:text-slate-600 disabled:opacity-20 transition"><ArrowDown size={13} /></button>
-                            </div>
-                          ) : <span />}
-                          <p className="font-semibold text-slate-800 text-sm truncate">{item.title}</p>
-                          <p className="text-xs text-slate-500 truncate">{item.description || '—'}</p>
-                          <p className="text-xs text-slate-600 flex items-center gap-1">
-                            <Clock size={11} className="text-slate-400" />{item.duration_hours || 1}h
-                          </p>
-                          <ModeBadge mode={item.mode} />
-                          {!isOwner && (
-                            <div className="flex items-center justify-end gap-1">
-                              <button onClick={() => { setEditingItemIdx(idx); setShowAddItem(false) }}
-                                className="p-1.5 rounded-lg text-slate-400 hover:text-brand-blue hover:bg-brand-blue-light transition">
-                                <Edit2 size={13} />
-                              </button>
-                              <button onClick={() => handleDeleteItem(idx)}
-                                className="p-1.5 rounded-lg text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition">
-                                <Trash2 size={13} />
-                              </button>
+                <>
+                  {/* Add topic form */}
+                  {showAddTopic && !isOwner && (
+                    <TopicForm
+                      onSave={handleAddTopic}
+                      onCancel={() => setShowAddTopic(false)}
+                      saving={savingItems}
+                    />
+                  )}
+
+                  {/* Table header */}
+                  {items.length > 0 && (
+                    <div className="grid grid-cols-[36px_32px_1fr_1fr_70px_90px_60px] gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      <span>#</span>
+                      <span></span>
+                      <span>Title</span>
+                      <span>Description</span>
+                      <span>Hrs</span>
+                      <span>Mode</span>
+                      <span className="text-right">Actions</span>
+                    </div>
+                  )}
+
+                  {/* Topics list */}
+                  {items.length === 0 && !showAddTopic ? (
+                    <div className="flex flex-col items-center justify-center py-16">
+                      <BookOpen className="w-10 h-10 text-slate-300 mb-3" />
+                      <p className="text-slate-500 text-sm font-medium">No topics yet</p>
+                      {!isOwner && (
+                        <button
+                          onClick={() => setShowAddTopic(true)}
+                          className="mt-3 flex items-center gap-1 text-xs text-primary font-semibold hover:text-primary-dark transition"
+                        >
+                          <Plus size={13} /> Add your first topic
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-slate-100">
+                      {items.map((item, idx) => (
+                        <div key={item.id ?? idx}>
+                          {editingTopicIdx === idx && !isOwner ? (
+                            <TopicForm
+                              initial={item}
+                              onSave={form => handleEditTopic(idx, form)}
+                              onCancel={() => setEditingTopicIdx(null)}
+                              saving={savingItems}
+                            />
+                          ) : (
+                            <div className="grid grid-cols-[36px_32px_1fr_1fr_70px_90px_60px] gap-2 items-center px-4 py-3 hover:bg-slate-50/60 transition">
+                              <span className="text-xs font-bold text-slate-400">{idx + 1}</span>
+                              {!isOwner ? (
+                                <div className="flex flex-col gap-0.5">
+                                  <button
+                                    onClick={() => handleMoveUp(idx)}
+                                    disabled={idx === 0 || savingItems}
+                                    className="text-slate-300 hover:text-slate-600 disabled:opacity-20 transition"
+                                  ><ArrowUp size={13} /></button>
+                                  <button
+                                    onClick={() => handleMoveDown(idx)}
+                                    disabled={idx === items.length - 1 || savingItems}
+                                    className="text-slate-300 hover:text-slate-600 disabled:opacity-20 transition"
+                                  ><ArrowDown size={13} /></button>
+                                </div>
+                              ) : <span />}
+                              <p className="font-semibold text-slate-800 text-sm truncate">{item.title}</p>
+                              <p className="text-xs text-slate-500 truncate">{item.description || '—'}</p>
+                              <p className="text-xs text-slate-600 flex items-center gap-1">
+                                <Clock size={11} className="text-slate-400" />
+                                {item.duration_hours || 1}h
+                              </p>
+                              <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${
+                                item.mode === 'online'
+                                  ? 'bg-blue-100 text-blue-700'
+                                  : 'bg-slate-100 text-slate-600'
+                              }`}>
+                                {item.mode === 'online' ? <Wifi size={9} /> : <Building2 size={9} />}
+                                {item.mode === 'online' ? 'Online' : 'Offline'}
+                              </span>
+                              {!isOwner && (
+                                <div className="flex items-center justify-end gap-0.5">
+                                  <button
+                                    onClick={() => { setEditingTopicIdx(idx); setShowAddTopic(false) }}
+                                    className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition"
+                                  ><Edit2 size={12} /></button>
+                                  <button
+                                    onClick={() => handleDeleteTopic(idx)}
+                                    className="p-1.5 rounded-lg text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition"
+                                  ><Trash2 size={12} /></button>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
-                      )}
+                      ))}
                     </div>
-                  ))}
-                </div>
-              )}
+                  )}
 
-              {/* Summary footer */}
-              {items.length > 0 && (
-                <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 flex items-center gap-4 text-xs text-slate-500">
-                  <span>{items.length} topics</span>
-                  <span>·</span>
-                  <span>{totalHours.toFixed(1)} hrs total</span>
-                  <span>·</span>
-                  <span>{items.filter(t => t.mode === 'online').length} online / {items.filter(t => t.mode === 'offline').length} offline</span>
-                </div>
+                  {/* Summary footer */}
+                  {items.length > 0 && (
+                    <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 flex flex-wrap gap-4 text-xs text-slate-500">
+                      <span className="flex items-center gap-1"><CheckCircle size={11} className="text-emerald-500" /> {items.length} topics</span>
+                      <span>·</span>
+                      <span>{totalHours.toFixed(1)} hrs total</span>
+                      <span>·</span>
+                      <span>{items.filter(t => t.mode === 'online').length} online</span>
+                      <span>{items.filter(t => t.mode === 'offline').length} offline</span>
+                    </div>
+                  )}
+                </>
               )}
             </>
           )}
         </div>
       </div>
 
-      {plannerOpen && (
-        <SmartPlanner
-          onClose={() => setPlannerOpen(false)}
-          onSuccess={() => toast.success('Distribution complete!')}
-        />
-      )}
+      {/* Smart Planner — loaded lazily */}
+      {plannerOpen && <PlannerWrapper onClose={() => setPlannerOpen(false)} />}
+    </div>
+  )
+}
+
+// Lazily wrap SmartPlanner to avoid crashing the whole page if it has issues
+function PlannerWrapper({ onClose }) {
+  const SmartPlanner = React.lazy(() => import('../components/SmartPlanner.jsx'))
+  return (
+    <React.Suspense fallback={null}>
+      <SmartPlanner
+        onClose={onClose}
+        onSuccess={() => toast.success('Topics distributed to calendar ✅')}
+      />
+    </React.Suspense>
+  )
+}
+
+// Inline set name editor (defined here so it has access to nothing complex)
+function SetNameEditor({ set, onSave, onCancel }) {
+  const [name, setName] = useState(set.name)
+  const [desc, setDesc] = useState(set.description || '')
+  return (
+    <div className="bg-white border border-primary rounded-xl p-3 space-y-2 shadow-sm">
+      <input
+        autoFocus
+        value={name}
+        onChange={e => setName(e.target.value)}
+        onKeyDown={e => e.key === 'Enter' && onSave(name, desc)}
+        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+        placeholder="Set name"
+      />
+      <input
+        value={desc}
+        onChange={e => setDesc(e.target.value)}
+        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+        placeholder="Description (optional)"
+      />
+      <div className="flex gap-2">
+        <button onClick={() => onSave(name, desc)} className="flex items-center gap-1 text-xs bg-primary text-white font-semibold px-3 py-1.5 rounded-lg">
+          <Save size={11} /> Save
+        </button>
+        <button onClick={onCancel} className="text-xs text-slate-500 px-2 py-1.5 rounded-lg hover:bg-slate-100">Cancel</button>
+      </div>
     </div>
   )
 }
