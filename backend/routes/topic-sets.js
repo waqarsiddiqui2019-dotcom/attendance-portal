@@ -5,12 +5,19 @@ const { authenticateToken } = require('../middleware/auth');
 const router = express.Router();
 router.use(authenticateToken);
 
-// GET /api/topic-sets  — trainer: own sets; owner: all sets with trainer name
+// Any authenticated user (trainer or owner) can manage their own topic sets.
+// Students cannot access this endpoint — they have no role-match below.
+const canManage = (req) => ['trainer', 'owner'].includes(req.user.role);
+
+// GET /api/topic-sets
+// Owner: sees ALL sets across all creators, with creator name
+// Trainer / Owner: sees own sets (+ all sets if owner)
 router.get('/', (req, res) => {
   try {
     if (req.user.role === 'owner') {
+      // Show all sets with creator name so owner can tell who made what
       const sets = db.prepare(`
-        SELECT ts.*, u.name AS trainer_name, COUNT(tsi.id) AS item_count
+        SELECT ts.*, u.name AS creator_name, COUNT(tsi.id) AS item_count
         FROM topic_sets ts
         JOIN users u ON ts.trainer_id = u.id
         LEFT JOIN topic_set_items tsi ON ts.id = tsi.set_id
@@ -18,6 +25,7 @@ router.get('/', (req, res) => {
       `).all();
       return res.json({ sets });
     }
+    // Trainer: own sets only
     const sets = db.prepare(`
       SELECT ts.*, COUNT(tsi.id) AS item_count
       FROM topic_sets ts
@@ -32,10 +40,10 @@ router.get('/', (req, res) => {
   }
 });
 
-// POST /api/topic-sets
+// POST /api/topic-sets — trainer or owner can create their own sets
 router.post('/', (req, res) => {
   try {
-    if (req.user.role !== 'trainer') return res.status(403).json({ error: 'Trainers only' });
+    if (!canManage(req)) return res.status(403).json({ error: 'Access denied' });
     const { name, description } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: 'Set name required' });
     const result = db.prepare(
@@ -49,10 +57,10 @@ router.post('/', (req, res) => {
   }
 });
 
-// PUT /api/topic-sets/:id
+// PUT /api/topic-sets/:id — only the creator can rename their set
 router.put('/:id', (req, res) => {
   try {
-    if (req.user.role !== 'trainer') return res.status(403).json({ error: 'Trainers only' });
+    if (!canManage(req)) return res.status(403).json({ error: 'Access denied' });
     const set = db.prepare('SELECT * FROM topic_sets WHERE id = ? AND trainer_id = ?')
       .get(req.params.id, req.user.id);
     if (!set) return res.status(404).json({ error: 'Set not found' });
@@ -66,10 +74,10 @@ router.put('/:id', (req, res) => {
   }
 });
 
-// DELETE /api/topic-sets/:id
+// DELETE /api/topic-sets/:id — only the creator can delete their set
 router.delete('/:id', (req, res) => {
   try {
-    if (req.user.role !== 'trainer') return res.status(403).json({ error: 'Trainers only' });
+    if (!canManage(req)) return res.status(403).json({ error: 'Access denied' });
     const set = db.prepare('SELECT * FROM topic_sets WHERE id = ? AND trainer_id = ?')
       .get(req.params.id, req.user.id);
     if (!set) return res.status(404).json({ error: 'Set not found' });
@@ -81,10 +89,10 @@ router.delete('/:id', (req, res) => {
   }
 });
 
-// GET /api/topic-sets/:id/items
+// GET /api/topic-sets/:id/items — creator or owner can read items
 router.get('/:id/items', (req, res) => {
   try {
-    // owner can read any set; trainer can only read their own
+    // Owner can read any set; trainer/owner-as-creator reads only their own
     const set = req.user.role === 'owner'
       ? db.prepare('SELECT * FROM topic_sets WHERE id=?').get(req.params.id)
       : db.prepare('SELECT * FROM topic_sets WHERE id=? AND trainer_id=?').get(req.params.id, req.user.id);
@@ -99,10 +107,10 @@ router.get('/:id/items', (req, res) => {
   }
 });
 
-// POST /api/topic-sets/:id/items  — bulk replace entire item list
+// POST /api/topic-sets/:id/items — bulk replace; only the creator can modify items
 router.post('/:id/items', (req, res) => {
   try {
-    if (req.user.role !== 'trainer') return res.status(403).json({ error: 'Trainers only' });
+    if (!canManage(req)) return res.status(403).json({ error: 'Access denied' });
     const set = db.prepare('SELECT * FROM topic_sets WHERE id=? AND trainer_id=?')
       .get(req.params.id, req.user.id);
     if (!set) return res.status(404).json({ error: 'Set not found' });

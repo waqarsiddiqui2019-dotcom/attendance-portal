@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react'
 import {
   Library, Plus, Edit2, Trash2, ArrowUp, ArrowDown, Shuffle,
   BookOpen, Loader2, X, Save, Wifi, Building2, Clock, AlertCircle,
-  CheckCircle, RefreshCw,
+  CheckCircle,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -16,14 +16,15 @@ function friendlyError(err) {
   if (!err) return 'Unknown error.'
   if (!err.response) return 'Cannot reach the server. Make sure START-APP.bat is running and try again.'
   const msg = err.response?.data?.error || err.response?.data?.message || ''
-  if (err.response.status === 403) return 'Access denied. Make sure you are logged in as a Trainer.'
+  if (err.response.status === 401) return 'Session expired. Please log in again.'
+  if (err.response.status === 403) return 'Access denied.'
   if (err.response.status === 404) return 'Item not found. Refresh the page and try again.'
   if (err.response.status === 400) return msg || 'Invalid input. Check all fields and try again.'
   if (err.response.status >= 500) return 'Server error. Restart the app via START-APP.bat and try again.'
   return msg || 'Something went wrong. Please try again.'
 }
 
-// ── PageError banner ───────────────────────────────────────────────────────────
+// ── Inline error banner ────────────────────────────────────────────────────────
 function ErrorBanner({ message, onRetry }) {
   if (!message) return null
   return (
@@ -39,7 +40,7 @@ function ErrorBanner({ message, onRetry }) {
   )
 }
 
-// ── TopicForm (add / edit inline) ──────────────────────────────────────────────
+// ── Topic add/edit form ────────────────────────────────────────────────────────
 function TopicForm({ initial, onSave, onCancel, saving }) {
   const [title, setTitle] = useState(initial?.title || '')
   const [desc,  setDesc]  = useState(initial?.description || '')
@@ -148,7 +149,7 @@ export default function TopicsLibrary() {
 
   const [editingSetId, setEditingSetId] = useState(null)
 
-  const [showAddTopic, setShowAddTopic]     = useState(false)
+  const [showAddTopic, setShowAddTopic]       = useState(false)
   const [editingTopicIdx, setEditingTopicIdx] = useState(null)
 
   const [plannerOpen, setPlannerOpen] = useState(false)
@@ -179,6 +180,10 @@ export default function TopicsLibrary() {
   }, [])
 
   useEffect(() => { if (selectedSetId) loadItems(selectedSetId) }, [selectedSetId, loadItems])
+
+  // ── Determine if the current user owns the selected set ───────────────────────
+  const selectedSet  = sets.find(s => s.id === selectedSetId)
+  const isMine = selectedSet?.trainer_id === user?.id
 
   // ── Set CRUD ──────────────────────────────────────────────────────────────────
   const handleCreateSet = async () => {
@@ -243,7 +248,6 @@ export default function TopicsLibrary() {
       })))
       const saved = res.data.items || list
       setItems(saved)
-      // Update item count in set list
       setSets(prev => prev.map(s =>
         s.id === selectedSetId ? { ...s, item_count: saved.length } : s
       ))
@@ -294,8 +298,7 @@ export default function TopicsLibrary() {
     await persistItems(list)
   }
 
-  const selectedSet = sets.find(s => s.id === selectedSetId)
-  const totalHours  = items.reduce((sum, t) => sum + (parseFloat(t.duration_hours) || 1), 0)
+  const totalHours = items.reduce((sum, t) => sum + (parseFloat(t.duration_hours) || 1), 0)
 
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
@@ -309,21 +312,16 @@ export default function TopicsLibrary() {
           <div>
             <h1 className="text-2xl font-bold text-slate-800">Topics Library</h1>
             <p className="text-slate-500 text-sm mt-0.5">
-              {isOwner ? 'View all trainer topic sets' : 'Create and manage reusable topic sets for your batches'}
+              Create and manage reusable topic sets for your batches
             </p>
           </div>
         </div>
-        {!isOwner && (
-          <button
-            onClick={() => {
-              // Lazy-import SmartPlanner only when opened
-              setPlannerOpen(true)
-            }}
-            className="flex items-center gap-2 bg-primary hover:bg-primary-dark text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition shadow-sm shadow-primary/30"
-          >
-            <Shuffle size={15} /> Smart Planner
-          </button>
-        )}
+        <button
+          onClick={() => setPlannerOpen(true)}
+          className="flex items-center gap-2 bg-primary hover:bg-primary-dark text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition shadow-sm shadow-primary/30"
+        >
+          <Shuffle size={15} /> Smart Planner
+        </button>
       </div>
 
       {/* Top-level sets error */}
@@ -335,7 +333,7 @@ export default function TopicsLibrary() {
         <div className="w-72 flex-shrink-0 space-y-2">
 
           {/* Create set button */}
-          {!isOwner && !creatingSet && (
+          {!creatingSet && (
             <button
               onClick={() => { setCreatingSet(true); setSetFormError('') }}
               className="flex items-center gap-2 w-full px-4 py-2.5 border-2 border-dashed border-slate-200 hover:border-primary text-slate-400 hover:text-primary rounded-xl text-sm font-medium transition"
@@ -387,12 +385,13 @@ export default function TopicsLibrary() {
           ) : sets.length === 0 ? (
             <div className="text-center py-12 text-slate-400 text-sm">
               <Library size={28} className="mx-auto mb-2 text-slate-300" />
-              {isOwner ? 'No topic sets created yet' : 'No sets yet — create your first one above'}
+              <p className="font-medium text-slate-500">No sets yet</p>
+              <p className="text-xs mt-1">Click "New Topic Set" above to create your first one</p>
             </div>
           ) : (
             sets.map(set => (
               <div key={set.id}>
-                {editingSetId === set.id && !isOwner ? (
+                {editingSetId === set.id ? (
                   <SetNameEditor
                     set={set}
                     onSave={(n, d) => handleRenameSet(set.id, n, d)}
@@ -412,17 +411,19 @@ export default function TopicsLibrary() {
                         <p className={`font-semibold text-sm truncate ${selectedSetId === set.id ? 'text-white' : 'text-slate-800'}`}>
                           {set.name}
                         </p>
-                        {set.trainer_name && (
+                        {/* Show creator name for owner viewing others' sets */}
+                        {isOwner && set.creator_name && (
                           <p className={`text-xs mt-0.5 ${selectedSetId === set.id ? 'text-blue-200' : 'text-slate-400'}`}>
-                            by {set.trainer_name}
+                            by {set.creator_name}
                           </p>
                         )}
                         <p className={`text-xs mt-0.5 ${selectedSetId === set.id ? 'text-blue-200' : 'text-slate-400'}`}>
                           {set.item_count ?? 0} topic{(set.item_count ?? 0) !== 1 ? 's' : ''}
                         </p>
                       </div>
-                      {!isOwner && (
-                        <div className={`flex gap-0.5 opacity-0 group-hover:opacity-100 transition`}>
+                      {/* Show edit/delete only for sets you own */}
+                      {set.trainer_id === user?.id && (
+                        <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition">
                           <button
                             onClick={e => { e.stopPropagation(); setEditingSetId(set.id) }}
                             className={`p-1 rounded ${selectedSetId === set.id ? 'hover:bg-white/20 text-white' : 'hover:bg-slate-100 text-slate-400'}`}
@@ -447,7 +448,7 @@ export default function TopicsLibrary() {
             <div className="flex flex-col items-center justify-center py-24 text-slate-400">
               <BookOpen size={36} className="mb-3 text-slate-300" />
               <p className="text-sm font-medium">Select a topic set on the left</p>
-              {!isOwner && <p className="text-xs text-slate-400 mt-1">or create a new set to get started</p>}
+              <p className="text-xs text-slate-400 mt-1">or create a new set to get started</p>
             </div>
           ) : (
             <>
@@ -462,14 +463,15 @@ export default function TopicsLibrary() {
                     {items.length} topic{items.length !== 1 ? 's' : ''} · {totalHours.toFixed(1)} hrs total
                   </p>
                 </div>
-                {!isOwner && (
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setPlannerOpen(true)}
-                      className="flex items-center gap-1.5 bg-[#1B3A6B] hover:bg-[#163058] text-white text-xs font-semibold px-3.5 py-2 rounded-lg transition"
-                    >
-                      <Shuffle size={12} /> Plan Batch
-                    </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setPlannerOpen(true)}
+                    className="flex items-center gap-1.5 bg-[#1B3A6B] hover:bg-[#163058] text-white text-xs font-semibold px-3.5 py-2 rounded-lg transition"
+                  >
+                    <Shuffle size={12} /> Plan Batch
+                  </button>
+                  {/* Add Topic button — only for the set's creator */}
+                  {isMine && (
                     <button
                       onClick={() => { setShowAddTopic(v => !v); setEditingTopicIdx(null) }}
                       className={`flex items-center gap-1.5 text-white text-xs font-semibold px-3.5 py-2 rounded-lg transition ${showAddTopic ? 'bg-slate-400 hover:bg-slate-500' : 'bg-primary hover:bg-primary-dark'}`}
@@ -477,8 +479,8 @@ export default function TopicsLibrary() {
                       {showAddTopic ? <X size={12} /> : <Plus size={12} />}
                       {showAddTopic ? 'Cancel' : 'Add Topic'}
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
 
               {/* Items error */}
@@ -496,7 +498,7 @@ export default function TopicsLibrary() {
               ) : (
                 <>
                   {/* Add topic form */}
-                  {showAddTopic && !isOwner && (
+                  {showAddTopic && isMine && (
                     <TopicForm
                       onSave={handleAddTopic}
                       onCancel={() => setShowAddTopic(false)}
@@ -522,7 +524,7 @@ export default function TopicsLibrary() {
                     <div className="flex flex-col items-center justify-center py-16">
                       <BookOpen className="w-10 h-10 text-slate-300 mb-3" />
                       <p className="text-slate-500 text-sm font-medium">No topics yet</p>
-                      {!isOwner && (
+                      {isMine && (
                         <button
                           onClick={() => setShowAddTopic(true)}
                           className="mt-3 flex items-center gap-1 text-xs text-primary font-semibold hover:text-primary-dark transition"
@@ -535,7 +537,7 @@ export default function TopicsLibrary() {
                     <div className="divide-y divide-slate-100">
                       {items.map((item, idx) => (
                         <div key={item.id ?? idx}>
-                          {editingTopicIdx === idx && !isOwner ? (
+                          {editingTopicIdx === idx && isMine ? (
                             <TopicForm
                               initial={item}
                               onSave={form => handleEditTopic(idx, form)}
@@ -545,7 +547,7 @@ export default function TopicsLibrary() {
                           ) : (
                             <div className="grid grid-cols-[36px_32px_1fr_1fr_70px_90px_60px] gap-2 items-center px-4 py-3 hover:bg-slate-50/60 transition">
                               <span className="text-xs font-bold text-slate-400">{idx + 1}</span>
-                              {!isOwner ? (
+                              {isMine ? (
                                 <div className="flex flex-col gap-0.5">
                                   <button
                                     onClick={() => handleMoveUp(idx)}
@@ -573,7 +575,7 @@ export default function TopicsLibrary() {
                                 {item.mode === 'online' ? <Wifi size={9} /> : <Building2 size={9} />}
                                 {item.mode === 'online' ? 'Online' : 'Offline'}
                               </span>
-                              {!isOwner && (
+                              {isMine && (
                                 <div className="flex items-center justify-end gap-0.5">
                                   <button
                                     onClick={() => { setEditingTopicIdx(idx); setShowAddTopic(false) }}
@@ -610,18 +612,18 @@ export default function TopicsLibrary() {
         </div>
       </div>
 
-      {/* Smart Planner — loaded lazily */}
+      {/* Smart Planner — loaded lazily to avoid crash propagation */}
       {plannerOpen && <PlannerWrapper onClose={() => setPlannerOpen(false)} />}
     </div>
   )
 }
 
-// Lazily wrap SmartPlanner to avoid crashing the whole page if it has issues
+// PlannerWrapper lazy-loads SmartPlanner so a crash there doesn't kill this page
+const LazySmartPlanner = React.lazy(() => import('../components/SmartPlanner.jsx'))
 function PlannerWrapper({ onClose }) {
-  const SmartPlanner = React.lazy(() => import('../components/SmartPlanner.jsx'))
   return (
     <React.Suspense fallback={null}>
-      <SmartPlanner
+      <LazySmartPlanner
         onClose={onClose}
         onSuccess={() => toast.success('Topics distributed to calendar ✅')}
       />
@@ -629,7 +631,7 @@ function PlannerWrapper({ onClose }) {
   )
 }
 
-// Inline set name editor (defined here so it has access to nothing complex)
+// Inline set name editor
 function SetNameEditor({ set, onSave, onCancel }) {
   const [name, setName] = useState(set.name)
   const [desc, setDesc] = useState(set.description || '')

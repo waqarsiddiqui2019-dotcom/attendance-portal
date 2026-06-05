@@ -7,7 +7,7 @@ echo  ========================================
 echo.
 echo  [1/2] Starting Backend Server (port 5000)...
 start "AttendancePro - Backend" cmd /k "cd /d C:\Users\waqar\Desktop\attendance-portal\backend && node server.js"
-timeout /t 2 /nobreak >nul
+timeout /t 5 /nobreak >nul
 
 echo  [2/2] Starting Frontend (port 3000)...
 start "AttendancePro - Frontend" cmd /k "cd /d C:\Users\waqar\Desktop\attendance-portal\frontend && npm run dev"
