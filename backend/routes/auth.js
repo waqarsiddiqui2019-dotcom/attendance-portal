@@ -79,7 +79,7 @@ router.post('/trainer-signup', (req, res) => {
 // POST /api/auth/register-student (trainer or owner)
 router.post('/register-student', authenticateToken, (req, res) => {
   try {
-    if (!['trainer', 'owner'].includes(req.user.role)) {
+    if (!['trainer', 'owner', 'co_owner', 'admin'].includes(req.user.role)) {
       return res.status(403).json({ error: 'Only trainers or owners can register students' });
     }
     const { name, email, password } = req.body;

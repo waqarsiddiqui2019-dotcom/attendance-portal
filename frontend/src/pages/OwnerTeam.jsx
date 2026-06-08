@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react'
-import { Users, CheckCircle, XCircle, Clock, Trash2, Loader2, UserCheck, AlertTriangle } from 'lucide-react'
+import { Users, CheckCircle, XCircle, Clock, Trash2, Loader2, UserCheck, AlertTriangle, X } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import toast from 'react-hot-toast'
 import { getOwnerTrainers, approveTrainer, rejectTrainer, deleteTrainer } from '../api/index.js'
@@ -20,6 +20,93 @@ function StatusBadge({ status }) {
   )
 }
 
+// ── Delete confirmation modal — requires typing DELETE ────────────────────────
+function DeleteConfirmModal({ trainer, onConfirm, onClose, loading }) {
+  const [typed, setTyped] = useState('')
+  if (!trainer) return null
+  const canDelete = typed === 'DELETE'
+  const hasBatches = trainer.batch_count > 0
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-slate-200">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-rose-100 flex items-center justify-center flex-shrink-0">
+              <Trash2 size={17} className="text-rose-600" />
+            </div>
+            <h2 className="text-base font-bold text-slate-800">Delete Trainer</h2>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 transition">
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-5 space-y-4">
+          <p className="text-sm text-slate-700">
+            You are about to permanently delete <strong>{trainer.name}</strong>.
+          </p>
+
+          {hasBatches ? (
+            <div className="bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 space-y-1">
+              <p className="text-sm font-bold text-rose-700 flex items-center gap-2">
+                <AlertTriangle size={15} /> This will permanently delete:
+              </p>
+              <ul className="text-sm text-rose-700 list-disc list-inside space-y-0.5 ml-1">
+                <li>All {trainer.batch_count} of their batch{trainer.batch_count !== 1 ? 'es' : ''}</li>
+                <li>All student enrollments in those batches</li>
+                <li>All attendance records for those batches</li>
+                <li>All topics and syllabus data for those batches</li>
+                <li>All leave and appointment requests in those batches</li>
+                <li>All topic sets created by this trainer</li>
+              </ul>
+              <p className="text-xs font-bold text-rose-800 mt-2">This cannot be undone.</p>
+            </div>
+          ) : (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+              <p className="text-sm text-amber-800">
+                This trainer has no batches. Only their account and personal data will be deleted.
+              </p>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+              Type <span className="font-bold text-rose-600">DELETE</span> to confirm
+            </label>
+            <input
+              autoFocus
+              value={typed}
+              onChange={e => setTyped(e.target.value)}
+              placeholder="Type DELETE here"
+              className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-rose-300 focus:border-rose-400 transition"
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex gap-3 px-6 pb-6">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-2.5 border border-slate-200 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={!canDelete || loading}
+            className="flex-1 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition"
+          >
+            {loading ? <><Loader2 size={14} className="animate-spin" /> Deleting…</> : 'Delete Permanently'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const FILTERS = ['all', 'pending', 'active', 'rejected']
 const FILTER_LABELS = { all: 'All', pending: 'Pending', active: 'Approved', rejected: 'Rejected' }
 
@@ -28,6 +115,9 @@ export default function OwnerTeam() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
   const [actionLoading, setActionLoading] = useState(null)
+
+  const [deleteTarget, setDeleteTarget] = useState(null)  // trainer object to delete
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   const fetchTrainers = useCallback(() => {
     setLoading(true)
@@ -40,21 +130,30 @@ export default function OwnerTeam() {
   useEffect(() => { fetchTrainers() }, [fetchTrainers])
 
   const handle = async (action, id, name) => {
-    const confirmMsg = action === 'delete'
-      ? `Remove ${name} permanently? Their batches will also be deleted.`
-      : null
-    if (confirmMsg && !window.confirm(confirmMsg)) return
-
     setActionLoading(`${action}-${id}`)
     try {
       if (action === 'approve') { await approveTrainer(id); toast.success(`${name} approved!`) }
       if (action === 'reject')  { await rejectTrainer(id);  toast.success(`${name} rejected`) }
-      if (action === 'delete')  { await deleteTrainer(id);  toast.success(`${name} removed`) }
       fetchTrainers()
     } catch (err) {
       toast.error(err.response?.data?.error || 'Action failed')
     } finally {
       setActionLoading(null)
+    }
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return
+    setDeleteLoading(true)
+    try {
+      await deleteTrainer(deleteTarget.id)
+      toast.success(`${deleteTarget.name} and all associated data deleted`)
+      setDeleteTarget(null)
+      fetchTrainers()
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Delete failed')
+    } finally {
+      setDeleteLoading(false)
     }
   }
 
@@ -125,9 +224,10 @@ export default function OwnerTeam() {
         ) : (
           <>
             {/* Table header */}
-            <div className="hidden sm:grid grid-cols-[1fr_1.5fr_auto_auto] gap-4 px-6 py-3 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            <div className="hidden sm:grid grid-cols-[1fr_1.5fr_auto_auto_auto] gap-4 px-6 py-3 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
               <span>Trainer</span>
               <span>Email</span>
+              <span>Batches</span>
               <span>Joined</span>
               <span>Actions</span>
             </div>
@@ -137,7 +237,7 @@ export default function OwnerTeam() {
                 const isLoading = (key) => actionLoading === `${key}-${trainer.id}`
                 return (
                   <div key={trainer.id}
-                    className={`flex flex-col sm:grid sm:grid-cols-[1fr_1.5fr_auto_auto] gap-3 sm:gap-4 items-start sm:items-center px-6 py-4 hover:bg-slate-50/60 transition border-l-4 ${STATUS_CONFIG[trainer.status]?.row || ''}`}>
+                    className={`flex flex-col sm:grid sm:grid-cols-[1fr_1.5fr_auto_auto_auto] gap-3 sm:gap-4 items-start sm:items-center px-6 py-4 hover:bg-slate-50/60 transition border-l-4 ${STATUS_CONFIG[trainer.status]?.row || ''}`}>
 
                     {/* Name + status */}
                     <div className="flex items-center gap-3 min-w-0">
@@ -154,6 +254,11 @@ export default function OwnerTeam() {
 
                     {/* Email */}
                     <p className="text-sm text-slate-500 truncate pl-12 sm:pl-0">{trainer.email}</p>
+
+                    {/* Batch count */}
+                    <p className="text-sm text-slate-600 pl-12 sm:pl-0 font-medium">
+                      {trainer.batch_count ?? 0} batch{(trainer.batch_count ?? 0) !== 1 ? 'es' : ''}
+                    </p>
 
                     {/* Date */}
                     <p className="text-xs text-slate-400 pl-12 sm:pl-0">{formatDate(trainer.created_at)}</p>
@@ -192,10 +297,10 @@ export default function OwnerTeam() {
                           Approve
                         </button>
                       )}
-                      <button onClick={() => handle('delete', trainer.id, trainer.name)}
+                      <button onClick={() => setDeleteTarget(trainer)}
                         disabled={actionLoading !== null}
                         className="p-1.5 rounded-lg text-slate-300 hover:text-rose-500 hover:bg-rose-50 disabled:opacity-50 transition">
-                        {isLoading('delete') ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   </div>
@@ -205,6 +310,13 @@ export default function OwnerTeam() {
           </>
         )}
       </div>
+
+      <DeleteConfirmModal
+        trainer={deleteTarget}
+        onConfirm={handleDeleteConfirm}
+        onClose={() => setDeleteTarget(null)}
+        loading={deleteLoading}
+      />
     </div>
   )
 }

@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import {
   ChevronRight, UserPlus, Trash2, Calendar, Users, BarChart3, X, Loader2,
   CheckCircle, XCircle, Clock, FileText, Download, AlertCircle, BookOpen,
-  Plus, Edit2, ArrowUp, ArrowDown, Shuffle, Wifi, Building2,
+  Plus, Edit2, ArrowUp, ArrowDown, Shuffle, Wifi, Building2, Mail, UserCircle2,
 } from 'lucide-react'
 import { format, parseISO, addDays } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -104,6 +104,83 @@ function AddStudentModal({ open, onClose, onSubmit, loading }) {
 function StatusBadge({ status }) {
   const map = { present:'bg-emerald-50 text-emerald-700 border-emerald-200', absent:'bg-rose-50 text-rose-700 border-rose-200', late:'bg-amber-50 text-amber-700 border-amber-200' }
   return <span className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-0.5 rounded-full border ${map[status]||'bg-slate-50 text-slate-500 border-slate-200'}`}>{status?.charAt(0)?.toUpperCase()+status?.slice(1)||'—'}</span>
+}
+
+// ── Account status badge (active / pending / rejected) ───────────────────────
+function AccountStatusBadge({ status }) {
+  const map = {
+    active:   'bg-emerald-50 text-emerald-700 border-emerald-200',
+    pending:  'bg-amber-50 text-amber-700 border-amber-200',
+    rejected: 'bg-rose-50 text-rose-700 border-rose-200',
+  }
+  const dot = {
+    active:   'bg-emerald-500',
+    pending:  'bg-amber-500',
+    rejected: 'bg-rose-500',
+  }
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-0.5 rounded-full border ${map[status] || 'bg-slate-50 text-slate-500 border-slate-200'}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${dot[status] || 'bg-slate-400'}`} />
+      {status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Unknown'}
+    </span>
+  )
+}
+
+// ── StudentProfileModal ───────────────────────────────────────────────────────
+function StudentProfileModal({ open, onClose, student, batch }) {
+  if (!open || !student) return null
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="px-6 pt-6 pb-5 border-b border-slate-200 flex items-start justify-between" style={{ background: 'linear-gradient(135deg, #1B3A6B 0%, #2272B9 100%)' }}>
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-full bg-white/15 border-2 border-white/30 flex items-center justify-center flex-shrink-0">
+              <span className="text-white font-bold text-xl">{student.name?.charAt(0)?.toUpperCase() || '?'}</span>
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-lg font-bold text-white truncate">{student.name}</h2>
+              <p className="text-blue-100 text-xs flex items-center gap-1.5 mt-0.5 truncate">
+                <Mail size={12} className="flex-shrink-0" /> {student.email}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition flex-shrink-0">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="p-6 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-slate-50 rounded-xl p-3.5">
+              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Account Status</p>
+              <AccountStatusBadge status={student.status} />
+            </div>
+            <div className="bg-slate-50 rounded-xl p-3.5">
+              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Role</p>
+              <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200">
+                <UserCircle2 size={12} /> Student
+              </span>
+            </div>
+          </div>
+          <div className="bg-slate-50 rounded-xl p-3.5">
+            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Batch</p>
+            <p className="text-sm font-medium text-slate-700">{batch?.name || '—'}</p>
+          </div>
+          <div className="bg-slate-50 rounded-xl p-3.5">
+            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Enrolled On</p>
+            <p className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
+              <Calendar size={13} className="text-slate-400" />
+              {student.enrolled_at ? format(parseISO(student.enrolled_at.replace(' ', 'T')), 'MMMM d, yyyy') : '—'}
+            </p>
+          </div>
+        </div>
+        <div className="px-6 pb-6">
+          <button onClick={onClose} className="w-full px-4 py-2.5 border border-slate-200 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function AttendanceToggle({ status, onChange }) {
@@ -471,6 +548,7 @@ export default function BatchDetail() {
 
   const [addModal, setAddModal] = useState(false)
   const [addLoading, setAddLoading] = useState(false)
+  const [profileStudent, setProfileStudent] = useState(null)
 
   const [attendanceDate, setAttendanceDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [attendanceData, setAttendanceData] = useState({})
@@ -537,8 +615,8 @@ export default function BatchDetail() {
       const res = await getAttendanceByDate(id, attendanceDate)
       const records = res.data.records || []
       const map = {}
-      students.forEach(s => (map[s.id] = 'present'))
-      records.forEach(r => { if (r.student_id) map[r.student_id] = r.status })
+      students.forEach(s => (map[s.id] = 'absent'))
+      records.forEach(r => { if (r.student_id && r.status) map[r.student_id] = r.status })
       setAttendanceData(map)
       setAttendanceLoaded(true)
     } catch (err) { showError(err, { action: 'load-attendance', page: window.location.pathname }) }
@@ -548,7 +626,7 @@ export default function BatchDetail() {
   const handleSaveAttendance = async () => {
     setSavingAttendance(true)
     try {
-      const records = Object.entries(attendanceData).map(([student_id, status]) => ({ student_id, status }))
+      const records = Object.entries(attendanceData).map(([student_id, status]) => ({ student_id, status: status || 'absent' }))
       await markAttendance(id, { date: attendanceDate, records })
       toast.success('Attendance saved ✅')
     } catch (err) { showError(err, { action: 'save-attendance', page: window.location.pathname }) }
@@ -684,23 +762,24 @@ export default function BatchDetail() {
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead><tr className="bg-slate-50">
-                  {['Student','Email','Enrolled',''].map(h => <th key={h} className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">{h}</th>)}
+                  {['Student','Email','Status','Enrolled',''].map(h => <th key={h} className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">{h}</th>)}
                 </tr></thead>
                 <tbody className="divide-y divide-slate-100">
                   {students.map(s => (
-                    <tr key={s.id} className="hover:bg-slate-50/50 transition">
+                    <tr key={s.id} className="hover:bg-slate-50/50 transition cursor-pointer" onClick={() => setProfileStudent(s)}>
                       <td className="px-6 py-3.5">
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-full bg-primary-light flex items-center justify-center flex-shrink-0">
                             <span className="text-primary font-semibold text-xs">{s.name?.charAt(0)?.toUpperCase()}</span>
                           </div>
-                          <span className="font-medium text-slate-700 text-sm">{s.name}</span>
+                          <span className="font-medium text-slate-700 text-sm hover:text-primary transition">{s.name}</span>
                         </div>
                       </td>
                       <td className="px-6 py-3.5 text-sm text-slate-500">{s.email}</td>
+                      <td className="px-6 py-3.5"><AccountStatusBadge status={s.status} /></td>
                       <td className="px-6 py-3.5 text-sm text-slate-500">{s.enrolled_at ? formatDate(s.enrolled_at) : '—'}</td>
                       <td className="px-6 py-3.5 text-right">
-                        <button onClick={() => handleRemoveStudent(s)} className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition"><Trash2 size={15} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); handleRemoveStudent(s) }} className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition"><Trash2 size={15} /></button>
                       </td>
                     </tr>
                   ))}
@@ -753,7 +832,7 @@ export default function BatchDetail() {
                               </div>
                             </td>
                             <td className="px-6 py-3">
-                              <AttendanceToggle status={attendanceData[s.id]||'present'} onChange={val => setAttendanceData(p => ({...p,[s.id]:val}))} />
+                              <AttendanceToggle status={attendanceData[s.id]||'absent'} onChange={val => setAttendanceData(p => ({...p,[s.id]:val}))} />
                             </td>
                           </tr>
                         ))}
@@ -834,6 +913,7 @@ export default function BatchDetail() {
       )}
 
       <AddStudentModal open={addModal} onClose={() => setAddModal(false)} onSubmit={handleAddStudent} loading={addLoading} />
+      <StudentProfileModal open={!!profileStudent} onClose={() => setProfileStudent(null)} student={profileStudent} batch={batch} />
 
       {plannerOpen && (
         <SmartPlanner

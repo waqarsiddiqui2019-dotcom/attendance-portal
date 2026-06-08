@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { X, ChevronRight, ChevronLeft, Shuffle, CheckCircle, AlertTriangle, XCircle, Loader2, Info } from 'lucide-react'
 import { format, addDays, differenceInWeeks } from 'date-fns'
 import toast from 'react-hot-toast'
-import { getBatches, getTopicSets, getTopicSetItems, distributeTopics } from '../api/index.js'
+import { getBatches, getTopicSets, getTopicSetItems, distributeTopics, getTopics } from '../api/index.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { showError } from '../utils/showError.jsx'
 
@@ -106,6 +106,8 @@ export default function SmartPlanner({ initialBatchId, onClose, onSuccess }) {
   const [items, setItems] = useState([])
   const [loadingItems, setLoadingItems] = useState(false)
   const [distributing, setDistributing] = useState(false)
+  const [existingTopicCount, setExistingTopicCount] = useState(0)
+  const [overwriteConfirmed, setOverwriteConfirmed] = useState(false)
 
   // Config state
   const [selectedSetId, setSelectedSetId] = useState('')
@@ -186,13 +188,20 @@ export default function SmartPlanner({ initialBatchId, onClose, onSuccess }) {
   const minMaxError = minPerSession > maxPerSession
   const isConfigValid = selectedSetId && selectedBatchId && startDate && classDays.length && items.length && !minMaxError && (modeB ? !!suggestedEnd : canFitA)
 
+  const goToPreview = async () => {
+    // Fetch existing topic count for this batch before showing preview
+    setExistingTopicCount(0)
+    setOverwriteConfirmed(false)
+    try {
+      const res = await getTopics(selectedBatchId)
+      const count = (res.data.topics || []).filter(t => !t.is_revision).length
+      setExistingTopicCount(count)
+    } catch {}
+    setStep('preview')
+  }
+
   const handleApply = async () => {
     if (!distribution.length) return
-    const selectedBatch = batches.find(b => String(b.id) === String(selectedBatchId))
-    if (selectedBatch) {
-      const hasTopic = await getTopicSets().then(() => true).catch(() => false)
-      // Check if batch already has topics via simple confirm
-    }
     setDistributing(true)
     try {
       const assignments = distribution.map(d => ({
@@ -428,11 +437,34 @@ export default function SmartPlanner({ initialBatchId, onClose, onSuccess }) {
                 </div>
               </div>
 
-              {/* Overwrite warning */}
-              <div className="flex items-center gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 font-medium">
-                <AlertTriangle size={14} className="flex-shrink-0 text-amber-500" />
-                This will replace all existing calendar topics for the selected batch.
-              </div>
+              {/* Overwrite confirmation — shown only if batch already has topics */}
+              {existingTopicCount > 0 ? (
+                <div className={`px-4 py-3 rounded-xl border text-sm ${overwriteConfirmed ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+                  <div className="flex items-start gap-2 mb-2">
+                    <AlertTriangle size={15} className={`flex-shrink-0 mt-0.5 ${overwriteConfirmed ? 'text-emerald-500' : 'text-amber-500'}`} />
+                    <p className={`font-semibold ${overwriteConfirmed ? 'text-emerald-800' : 'text-amber-800'}`}>
+                      This batch already has {existingTopicCount} topic{existingTopicCount !== 1 ? 's' : ''} distributed on the calendar.
+                      Applying this plan will replace them all.
+                    </p>
+                  </div>
+                  {!overwriteConfirmed && (
+                    <button
+                      onClick={() => setOverwriteConfirmed(true)}
+                      className="ml-5 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg transition"
+                    >
+                      I understand — Replace All
+                    </button>
+                  )}
+                  {overwriteConfirmed && (
+                    <p className="ml-5 text-xs font-semibold text-emerald-700">✅ Confirmed — ready to apply</p>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 font-medium">
+                  <AlertTriangle size={14} className="flex-shrink-0 text-amber-500" />
+                  This will replace all existing calendar topics for the selected batch.
+                </div>
+              )}
 
               {/* Preview table */}
               <div className="border border-slate-200 rounded-xl overflow-hidden">
@@ -480,14 +512,17 @@ export default function SmartPlanner({ initialBatchId, onClose, onSuccess }) {
             {step === 'config' ? 'Cancel' : 'Back'}
           </button>
           {step === 'config' ? (
-            <button onClick={() => setStep('preview')} disabled={!isConfigValid}
+            <button onClick={goToPreview} disabled={!isConfigValid}
               className="flex items-center gap-2 bg-[#1B3A6B] hover:bg-[#163058] disabled:opacity-40 text-white text-sm font-semibold px-6 py-2.5 rounded-xl transition">
               Preview Distribution <ChevronRight size={15} />
             </button>
           ) : (
-            <button onClick={handleApply} disabled={distributing}
-              className="flex items-center gap-2 bg-primary hover:bg-primary-dark disabled:opacity-60 text-white text-sm font-semibold px-6 py-2.5 rounded-xl transition shadow-sm shadow-primary/30">
-              {distributing ? <><Loader2 size={15} className="animate-spin" /> Applying...</> : <><Shuffle size={15} /> Apply to Calendar</>}
+            <button
+              onClick={handleApply}
+              disabled={distributing || (existingTopicCount > 0 && !overwriteConfirmed)}
+              className="flex items-center gap-2 bg-primary hover:bg-primary-dark disabled:opacity-40 text-white text-sm font-semibold px-6 py-2.5 rounded-xl transition shadow-sm shadow-primary/30"
+            >
+              {distributing ? <><Loader2 size={15} className="animate-spin" /> Applying…</> : <><Shuffle size={15} /> Apply to Calendar</>}
             </button>
           )}
         </div>

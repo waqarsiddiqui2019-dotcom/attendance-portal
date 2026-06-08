@@ -16,12 +16,13 @@ export default function ProtectedRoute({ children, role }) {
     )
   }
 
-  if (!user) {
-    return <Navigate to="/login" replace />
-  }
+  if (!user) return <Navigate to="/login" replace />
 
-  if (role && user.role !== role) {
-    return <Navigate to="/login" replace />
+  if (role) {
+    const allowed = Array.isArray(role) ? role : [role]
+    // co_owner and admin are allowed wherever 'owner' is allowed
+    const effective = allowed.includes('owner') ? [...allowed, 'co_owner', 'admin'] : allowed
+    if (!effective.includes(user.role)) return <Navigate to="/login" replace />
   }
 
   return children

@@ -1,23 +1,45 @@
-import React, { useState } from 'react'
-import { NavLink, useNavigate, Outlet } from 'react-router-dom'
-import { LayoutDashboard, BookOpen, Library, LogOut, Menu, X } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { NavLink, useNavigate, useLocation, Outlet } from 'react-router-dom'
+import { LayoutDashboard, BookOpen, Library, FileText, MessageSquare, LogOut, Menu, X } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
-
-const navItems = [
-  { to: '/trainer/dashboard',       icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/trainer/batches',         icon: BookOpen,        label: 'My Batches' },
-  { to: '/trainer/topics-library',  icon: Library,         label: 'Topics Library' },
-]
+import NotificationBell from './NotificationBell.jsx'
+import { getLeavePendingCount, getApptPendingCount, getMessageUnreadCount } from '../api/index.js'
 
 export default function TrainerLayout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const isMessages = location.pathname.endsWith('/messages')
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [pendingCount, setPendingCount] = useState(0)
+  const [msgCount, setMsgCount] = useState(0)
+
+  useEffect(() => {
+    const fetchPending = () => {
+      Promise.all([getLeavePendingCount(), getApptPendingCount(), getMessageUnreadCount()])
+        .then(([l, a, m]) => {
+          setPendingCount((l.data.count || 0) + (a.data.count || 0))
+          setMsgCount(m.data.count || 0)
+        })
+        .catch(() => {})
+    }
+    fetchPending()
+    const iv = setInterval(fetchPending, 30000)
+    return () => clearInterval(iv)
+  }, [])
 
   const handleLogout = () => {
     logout()
     navigate('/login')
   }
+
+  const navItems = [
+    { to: '/trainer/dashboard',       icon: LayoutDashboard, label: 'Dashboard' },
+    { to: '/trainer/batches',         icon: BookOpen,        label: 'My Batches' },
+    { to: '/trainer/topics-library',  icon: Library,         label: 'Topics Library' },
+    { to: '/trainer/requests',        icon: FileText,        label: 'Requests', badge: pendingCount },
+    { to: '/trainer/messages',        icon: MessageSquare,   label: 'Messages', badge: msgCount },
+  ]
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
@@ -53,7 +75,7 @@ export default function TrainerLayout() {
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-1">
-        {navItems.map(({ to, icon: Icon, label }) => (
+        {navItems.map(({ to, icon: Icon, label, badge }) => (
           <NavLink
             key={to}
             to={to}
@@ -67,13 +89,19 @@ export default function TrainerLayout() {
             }
           >
             <Icon size={18} className="flex-shrink-0" />
-            {label}
+            <span className="flex-1">{label}</span>
+            {badge > 0 && (
+              <span className="text-xs font-bold bg-rose-500 text-white rounded-full min-w-[20px] h-5 flex items-center justify-center px-1 flex-shrink-0">
+                {badge}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>
 
-      {/* Logout */}
-      <div className="px-3 py-4 border-t border-white/10">
+      {/* Notification Bell + Logout */}
+      <div className="px-3 py-4 border-t border-white/10 space-y-1">
+        <NotificationBell />
         <button
           onClick={handleLogout}
           className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-blue-200 hover:bg-white/10 hover:text-white transition-all"
@@ -87,7 +115,6 @@ export default function TrainerLayout() {
 
   return (
     <div className="min-h-screen flex bg-gray-50">
-      {/* Mobile overlay */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-20 bg-black/50 lg:hidden"
@@ -119,9 +146,8 @@ export default function TrainerLayout() {
       </aside>
 
       {/* Main content */}
-      <div className="flex-1 lg:ml-64 flex flex-col min-h-screen">
-        {/* Mobile header */}
-        <header className="lg:hidden flex items-center gap-3 px-4 py-3 bg-white border-b border-slate-200 sticky top-0 z-10">
+      <div className={`flex-1 lg:ml-64 flex flex-col ${isMessages ? 'h-screen overflow-hidden' : 'min-h-screen'}`}>
+        <header className="lg:hidden flex items-center gap-3 px-4 py-3 bg-white border-b border-slate-200 z-10 flex-shrink-0">
           <button
             onClick={() => setSidebarOpen(true)}
             className="p-2 rounded-lg text-slate-600 hover:bg-slate-100"
@@ -131,7 +157,7 @@ export default function TrainerLayout() {
           <img src="/DD_Logo_.png" alt="Define Digital" className="h-7 w-auto" />
         </header>
 
-        <main className="flex-1 p-6 lg:p-8 overflow-y-auto">
+        <main className={`flex-1 ${isMessages ? 'overflow-hidden' : 'p-6 lg:p-8 overflow-y-auto'}`}>
           <Outlet />
         </main>
       </div>

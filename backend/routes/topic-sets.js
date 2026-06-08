@@ -5,17 +5,14 @@ const { authenticateToken } = require('../middleware/auth');
 const router = express.Router();
 router.use(authenticateToken);
 
-// Any authenticated user (trainer or owner) can manage their own topic sets.
-// Students cannot access this endpoint — they have no role-match below.
-const canManage = (req) => ['trainer', 'owner'].includes(req.user.role);
+const OWNER_ROLES = ['owner', 'co_owner', 'admin'];
+const canManage = (req) => ['trainer', 'owner', 'co_owner', 'admin'].includes(req.user.role);
+const isOwnerRole = (req) => OWNER_ROLES.includes(req.user.role);
 
 // GET /api/topic-sets
-// Owner: sees ALL sets across all creators, with creator name
-// Trainer / Owner: sees own sets (+ all sets if owner)
 router.get('/', (req, res) => {
   try {
-    if (req.user.role === 'owner') {
-      // Show all sets with creator name so owner can tell who made what
+    if (isOwnerRole(req)) {
       const sets = db.prepare(`
         SELECT ts.*, u.name AS creator_name, COUNT(tsi.id) AS item_count
         FROM topic_sets ts
@@ -25,7 +22,6 @@ router.get('/', (req, res) => {
       `).all();
       return res.json({ sets });
     }
-    // Trainer: own sets only
     const sets = db.prepare(`
       SELECT ts.*, COUNT(tsi.id) AS item_count
       FROM topic_sets ts
@@ -40,7 +36,7 @@ router.get('/', (req, res) => {
   }
 });
 
-// POST /api/topic-sets — trainer or owner can create their own sets
+// POST /api/topic-sets
 router.post('/', (req, res) => {
   try {
     if (!canManage(req)) return res.status(403).json({ error: 'Access denied' });
@@ -57,12 +53,13 @@ router.post('/', (req, res) => {
   }
 });
 
-// PUT /api/topic-sets/:id — only the creator can rename their set
+// PUT /api/topic-sets/:id — creator OR owner/co_owner/admin can rename any set
 router.put('/:id', (req, res) => {
   try {
     if (!canManage(req)) return res.status(403).json({ error: 'Access denied' });
-    const set = db.prepare('SELECT * FROM topic_sets WHERE id = ? AND trainer_id = ?')
-      .get(req.params.id, req.user.id);
+    const set = isOwnerRole(req)
+      ? db.prepare('SELECT * FROM topic_sets WHERE id=?').get(req.params.id)
+      : db.prepare('SELECT * FROM topic_sets WHERE id=? AND trainer_id=?').get(req.params.id, req.user.id);
     if (!set) return res.status(404).json({ error: 'Set not found' });
     const { name, description } = req.body;
     db.prepare('UPDATE topic_sets SET name=?, description=? WHERE id=?')
@@ -74,13 +71,15 @@ router.put('/:id', (req, res) => {
   }
 });
 
-// DELETE /api/topic-sets/:id — only the creator can delete their set
+// DELETE /api/topic-sets/:id — creator OR owner/co_owner/admin can delete any set
 router.delete('/:id', (req, res) => {
   try {
     if (!canManage(req)) return res.status(403).json({ error: 'Access denied' });
-    const set = db.prepare('SELECT * FROM topic_sets WHERE id = ? AND trainer_id = ?')
-      .get(req.params.id, req.user.id);
+    const set = isOwnerRole(req)
+      ? db.prepare('SELECT * FROM topic_sets WHERE id=?').get(req.params.id)
+      : db.prepare('SELECT * FROM topic_sets WHERE id=? AND trainer_id=?').get(req.params.id, req.user.id);
     if (!set) return res.status(404).json({ error: 'Set not found' });
+    db.prepare('DELETE FROM topic_set_items WHERE set_id=?').run(set.id);
     db.prepare('DELETE FROM topic_sets WHERE id=?').run(set.id);
     return res.json({ message: 'Set deleted' });
   } catch (err) {
@@ -89,11 +88,10 @@ router.delete('/:id', (req, res) => {
   }
 });
 
-// GET /api/topic-sets/:id/items — creator or owner can read items
+// GET /api/topic-sets/:id/items — creator or owner/co_owner/admin can read items
 router.get('/:id/items', (req, res) => {
   try {
-    // Owner can read any set; trainer/owner-as-creator reads only their own
-    const set = req.user.role === 'owner'
+    const set = isOwnerRole(req)
       ? db.prepare('SELECT * FROM topic_sets WHERE id=?').get(req.params.id)
       : db.prepare('SELECT * FROM topic_sets WHERE id=? AND trainer_id=?').get(req.params.id, req.user.id);
     if (!set) return res.status(404).json({ error: 'Set not found' });
@@ -107,12 +105,13 @@ router.get('/:id/items', (req, res) => {
   }
 });
 
-// POST /api/topic-sets/:id/items — bulk replace; only the creator can modify items
+// POST /api/topic-sets/:id/items — creator OR owner/co_owner/admin can modify items
 router.post('/:id/items', (req, res) => {
   try {
     if (!canManage(req)) return res.status(403).json({ error: 'Access denied' });
-    const set = db.prepare('SELECT * FROM topic_sets WHERE id=? AND trainer_id=?')
-      .get(req.params.id, req.user.id);
+    const set = isOwnerRole(req)
+      ? db.prepare('SELECT * FROM topic_sets WHERE id=?').get(req.params.id)
+      : db.prepare('SELECT * FROM topic_sets WHERE id=? AND trainer_id=?').get(req.params.id, req.user.id);
     if (!set) return res.status(404).json({ error: 'Set not found' });
     const { items } = req.body;
     if (!Array.isArray(items)) return res.status(400).json({ error: 'items array required' });

@@ -127,6 +127,7 @@ function TopicForm({ initial, onSave, onCancel, saving }) {
 export default function TopicsLibrary() {
   const { user } = useAuth()
   const isOwner = user?.role === 'owner'
+  const isOwnerRole = ['owner', 'co_owner', 'admin'].includes(user?.role)
 
   // ── Sets state ───────────────────────────────────────────────────────────────
   const [sets, setSets]               = useState([])
@@ -181,9 +182,10 @@ export default function TopicsLibrary() {
 
   useEffect(() => { if (selectedSetId) loadItems(selectedSetId) }, [selectedSetId, loadItems])
 
-  // ── Determine if the current user owns the selected set ───────────────────────
+  // ── Determine if the current user can manage the selected set ────────────────
   const selectedSet  = sets.find(s => s.id === selectedSetId)
-  const isMine = selectedSet?.trainer_id === user?.id
+  // Owner roles can manage any set; trainers can only manage their own
+  const isMine = isOwnerRole || selectedSet?.trainer_id === user?.id
 
   // ── Set CRUD ──────────────────────────────────────────────────────────────────
   const handleCreateSet = async () => {
@@ -398,9 +400,12 @@ export default function TopicsLibrary() {
                     onCancel={() => setEditingSetId(null)}
                   />
                 ) : (
-                  <button
+                  <div
+                    role="button"
+                    tabIndex={0}
                     onClick={() => setSelectedSetId(set.id)}
-                    className={`w-full text-left px-4 py-3 rounded-xl border transition group ${
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedSetId(set.id) } }}
+                    className={`w-full text-left px-4 py-3 rounded-xl border transition group cursor-pointer ${
                       selectedSetId === set.id
                         ? 'bg-[#1B3A6B] border-[#1B3A6B]'
                         : 'bg-white border-slate-200 hover:border-[#1B3A6B]/40'
@@ -421,8 +426,8 @@ export default function TopicsLibrary() {
                           {set.item_count ?? 0} topic{(set.item_count ?? 0) !== 1 ? 's' : ''}
                         </p>
                       </div>
-                      {/* Show edit/delete only for sets you own */}
-                      {set.trainer_id === user?.id && (
+                      {/* Show edit/delete for own sets, or any set if owner role */}
+                      {(isOwnerRole || set.trainer_id === user?.id) && (
                         <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition">
                           <button
                             onClick={e => { e.stopPropagation(); setEditingSetId(set.id) }}
@@ -435,7 +440,7 @@ export default function TopicsLibrary() {
                         </div>
                       )}
                     </div>
-                  </button>
+                  </div>
                 )}
               </div>
             ))

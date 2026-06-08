@@ -24,7 +24,7 @@ if (usersExists) {
         name        TEXT NOT NULL,
         email       TEXT UNIQUE NOT NULL,
         password    TEXT NOT NULL,
-        role        TEXT NOT NULL CHECK(role IN ('owner','trainer','student')),
+        role        TEXT NOT NULL CHECK(role IN ('owner','co_owner','admin','trainer','student')),
         status      TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','pending','rejected')),
         created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
       );
@@ -38,7 +38,41 @@ if (usersExists) {
   }
 }
 
+// ── Migration: expand role constraint to include co_owner and admin ─────────
+{
+  const row = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get();
+  if (row && !row.sql.includes('co_owner')) {
+    console.log('[DB] Migrating: expanding role constraint for co_owner/admin...');
+    db.pragma('foreign_keys = OFF');
+    db.exec(`
+      CREATE TABLE users_roles_new (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        name        TEXT NOT NULL,
+        email       TEXT UNIQUE NOT NULL,
+        password    TEXT NOT NULL,
+        role        TEXT NOT NULL CHECK(role IN ('owner','co_owner','admin','trainer','student')),
+        status      TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','pending','rejected')),
+        created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO users_roles_new SELECT * FROM users;
+      DROP TABLE users;
+      ALTER TABLE users_roles_new RENAME TO users;
+    `);
+    db.pragma('foreign_keys = ON');
+    console.log('[DB] Role expansion migration complete.');
+  }
+}
+
 db.pragma('foreign_keys = ON');
+
+// ── Migrate: add last_seen to users ──────────────────────────────────────
+{
+  const cols = db.prepare('PRAGMA table_info(users)').all().map(c => c.name)
+  if (!cols.includes('last_seen')) {
+    db.exec('ALTER TABLE users ADD COLUMN last_seen DATETIME')
+    console.log('[DB] Added last_seen column to users')
+  }
+}
 
 // ── Migrate: add schedule fields to batches ───────────────────────────────
 const batchCols = db.prepare('PRAGMA table_info(batches)').all().map(c => c.name);
@@ -81,7 +115,7 @@ db.exec(`
     name        TEXT NOT NULL,
     email       TEXT UNIQUE NOT NULL,
     password    TEXT NOT NULL,
-    role        TEXT NOT NULL CHECK(role IN ('owner','trainer','student')),
+    role        TEXT NOT NULL CHECK(role IN ('owner','co_owner','admin','trainer','student')),
     status      TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','pending','rejected')),
     created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
   );
@@ -166,6 +200,92 @@ db.exec(`
     mode        TEXT NOT NULL DEFAULT 'offline',
     created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS holidays (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    date        TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    applies_to  TEXT NOT NULL DEFAULT 'all',
+    batch_ids   TEXT,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS leave_requests (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id         INTEGER NOT NULL,
+    batch_id           INTEGER NOT NULL,
+    leave_type         TEXT NOT NULL,
+    leave_type_note    TEXT,
+    from_date          TEXT NOT NULL,
+    to_date            TEXT NOT NULL,
+    reason             TEXT NOT NULL,
+    status             TEXT NOT NULL DEFAULT 'pending',
+    trainer_note       TEXT,
+    rejection_reason   TEXT,
+    counter_from_date  TEXT,
+    counter_to_date    TEXT,
+    counter_message    TEXT,
+    created_at         DATETIME DEFAULT CURRENT_TIMESTAMP,
+    reviewed_at        DATETIME,
+    FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (batch_id)   REFERENCES batches(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS appointment_requests (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id       INTEGER NOT NULL,
+    batch_id         INTEGER NOT NULL,
+    preferred_date   TEXT NOT NULL,
+    preferred_time   TEXT NOT NULL,
+    duration_minutes INTEGER NOT NULL DEFAULT 30,
+    topic_question   TEXT NOT NULL,
+    mode             TEXT NOT NULL DEFAULT 'online',
+    status           TEXT NOT NULL DEFAULT 'pending',
+    trainer_note     TEXT,
+    suggested_date   TEXT,
+    suggested_time   TEXT,
+    created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    reviewed_at      DATETIME,
+    FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (batch_id)   REFERENCES batches(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS notifications (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      INTEGER NOT NULL,
+    title        TEXT NOT NULL,
+    message      TEXT NOT NULL,
+    type         TEXT NOT NULL DEFAULT 'info',
+    related_type TEXT,
+    related_id   INTEGER,
+    is_read      INTEGER NOT NULL DEFAULT 0,
+    created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS messages (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    sender_id    INTEGER NOT NULL,
+    recipient_id INTEGER NOT NULL,
+    body         TEXT NOT NULL,
+    is_read      INTEGER NOT NULL DEFAULT 0,
+    created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (sender_id)    REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (recipient_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS staff_permissions (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id               INTEGER NOT NULL UNIQUE,
+    can_manage_trainers   INTEGER NOT NULL DEFAULT 0,
+    can_manage_students   INTEGER NOT NULL DEFAULT 0,
+    can_manage_batches    INTEGER NOT NULL DEFAULT 0,
+    can_view_reports      INTEGER NOT NULL DEFAULT 1,
+    can_approve_leaves    INTEGER NOT NULL DEFAULT 0,
+    can_message_all       INTEGER NOT NULL DEFAULT 1,
+    created_at            DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 `);
 

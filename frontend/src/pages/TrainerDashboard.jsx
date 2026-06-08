@@ -42,11 +42,19 @@ function StatCard({ icon: Icon, label, value, color, bgColor, trend }) {
 export default function TrainerDashboard() {
   const { user } = useAuth()
   const [batches, setBatches] = useState([])
+  const [dashData, setDashData] = useState({ unique_student_count: null, today_present: null, today_total: null })
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     getBatches()
-      .then((res) => setBatches(res.data.batches || res.data || []))
+      .then((res) => {
+        setBatches(res.data.batches || [])
+        setDashData({
+          unique_student_count: res.data.unique_student_count ?? null,
+          today_present:        res.data.today_present        ?? null,
+          today_total:          res.data.today_total          ?? null,
+        })
+      })
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [])
@@ -65,10 +73,10 @@ export default function TrainerDashboard() {
     }
   })
 
-  const totalStudents = batches.reduce(
-    (sum, b) => sum + (b.student_count || b.students?.length || 0),
-    0
-  )
+  const totalStudents = dashData.unique_student_count ?? 0
+  const todayLabel    = dashData.today_total > 0
+    ? `${dashData.today_present} / ${dashData.today_total}`
+    : '—'
 
   const recentBatches = [...batches]
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
@@ -92,7 +100,7 @@ export default function TrainerDashboard() {
     {
       icon: CheckCircle,
       label: "Today's Attendance",
-      value: '—',
+      value: todayLabel,
       color: 'text-emerald-600',
       bgColor: 'bg-emerald-50',
     },

@@ -20,6 +20,9 @@ Thumbs.db
 # Screenshots (generated, not source code)
 screenshots/
 
+# Environment secrets (never commit)
+backend/.env
+
 # Temp files (root-level only — created for Playwright screenshots)
 screenshot.mjs
 /package.json

@@ -114,6 +114,14 @@ export const distributeTopics = (batchId, assignments) =>
 export const toggleTopicComplete = (batchId, date) =>
   api.patch(`/topics/batch/${batchId}/date/${date}/toggle-complete`)
 
+// ── Owner Calendars ───────────────────────────────────────────────────────────
+export const getOwnerStudents      = ()           => api.get('/owner/students')
+export const getStudentCalendar    = (id, month)  => api.get(`/owner/student/${id}/calendar?month=${month}`)
+export const getTrainerCalendar    = (id, month)  => api.get(`/owner/trainer/${id}/calendar?month=${month}`)
+export const getHolidays           = ()           => api.get('/owner/holidays')
+export const createHoliday         = (data)       => api.post('/owner/holidays', data)
+export const deleteHoliday         = (id)         => api.delete(`/owner/holidays/${id}`)
+
 // ── Topic Sets (Library) ──────────────────────────────────────────────────────
 export const getTopicSets = () => api.get('/topic-sets')
 export const createTopicSet = (data) => api.post('/topic-sets', data)
@@ -121,3 +129,56 @@ export const updateTopicSet = (id, data) => api.put(`/topic-sets/${id}`, data)
 export const deleteTopicSet = (id) => api.delete(`/topic-sets/${id}`)
 export const getTopicSetItems = (id) => api.get(`/topic-sets/${id}/items`)
 export const saveTopicSetItems = (id, items) => api.post(`/topic-sets/${id}/items`, { items })
+
+// ── Leaves ────────────────────────────────────────────────────────────────────
+export const getLeaves            = ()          => api.get('/leaves')
+export const getLeave             = (id)        => api.get(`/leaves/${id}`)
+export const getLeaveBalance      = ()          => api.get('/leaves/balance')
+export const getLeaveImpact       = (params)    => api.get('/leaves/impact', { params })
+export const getLeavePendingCount = ()          => api.get('/leaves/pending-count')
+export const createLeave          = (data)      => api.post('/leaves', data)
+export const approveLeave         = (id, data)  => api.put(`/leaves/${id}/approve`, data)
+export const rejectLeave          = (id, data)  => api.put(`/leaves/${id}/reject`, data)
+export const counterLeave         = (id, data)  => api.put(`/leaves/${id}/counter`, data)
+export const acceptCounter        = (id)        => api.put(`/leaves/${id}/accept-counter`)
+export const declineCounter       = (id)        => api.put(`/leaves/${id}/decline-counter`)
+export const cancelLeave          = (id)        => api.put(`/leaves/${id}/cancel`)
+
+// ── Appointments ──────────────────────────────────────────────────────────────
+export const getAppointments       = ()         => api.get('/appointments')
+export const getAppointment        = (id)       => api.get(`/appointments/${id}`)
+export const getApptPendingCount   = ()         => api.get('/appointments/pending-count')
+export const createAppointment     = (data)     => api.post('/appointments', data)
+export const confirmAppointment    = (id, data) => api.put(`/appointments/${id}/confirm`, data)
+export const declineAppointment    = (id, data) => api.put(`/appointments/${id}/decline`, data)
+export const suggestAppointment    = (id, data) => api.put(`/appointments/${id}/suggest`, data)
+export const acceptApptSuggestion  = (id)       => api.put(`/appointments/${id}/accept-suggestion`)
+export const declineApptSuggestion = (id)       => api.put(`/appointments/${id}/decline-suggestion`)
+export const cancelAppointment     = (id)       => api.put(`/appointments/${id}/cancel`)
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+export const getNotifications     = ()   => api.get('/notifications')
+export const getUnreadCount       = ()   => api.get('/notifications/unread-count')
+export const markNotificationRead = (id) => api.put(`/notifications/${id}/read`)
+export const markAllRead          = ()   => api.put('/notifications/read-all')
+
+// ── Owner Leaves ──────────────────────────────────────────────────────────────
+export const getOwnerLeaveStats  = ()       => api.get('/owner/leave-stats')
+export const getOwnerLeaves      = (params) => api.get('/owner/leaves', { params })
+export const getOwnerTrainerStats = ()      => api.get('/owner/trainer-stats')
+export const getOwnerLeaveAlerts  = ()      => api.get('/owner/leave-alerts')
+
+// ── Owner Staff ───────────────────────────────────────────────────────────────
+export const getOwnerStaff            = ()            => api.get('/owner/staff')
+export const createStaff              = (data)        => api.post('/owner/staff', data)
+export const updateStaffPermissions   = (id, data)    => api.put(`/owner/staff/${id}/permissions`, data)
+export const deleteStaff              = (id)          => api.delete(`/owner/staff/${id}`)
+
+// ── Messages ──────────────────────────────────────────────────────────────────
+export const getMessageContacts   = ()                   => api.get('/messages/contacts')
+export const getMessageThread     = (userId)             => api.get(`/messages/thread/${userId}`)
+export const sendMessage          = (data)               => api.post('/messages', data)
+export const getMessageUnreadCount = ()                  => api.get('/messages/unread-count')
+export const markMessagesRead     = (userId)             => api.put(`/messages/read/${userId}`)
+export const getMessageAllLogs    = ()                   => api.get('/messages/all-logs')
+export const getAdminConversation = (u1, u2)             => api.get(`/messages/conversation/${u1}/${u2}`)

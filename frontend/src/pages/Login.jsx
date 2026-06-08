@@ -32,9 +32,9 @@ export default function Login() {
     try {
       const user = await login(email, password)
       toast.success(`Welcome back, ${user.name}! ✅`)
-      if (user.role === 'owner')        navigate('/owner/dashboard')
-      else if (user.role === 'trainer') navigate('/trainer/dashboard')
-      else                              navigate('/student/dashboard')
+      if (['owner','co_owner','admin'].includes(user.role)) navigate('/owner/dashboard')
+      else if (user.role === 'trainer')                    navigate('/trainer/dashboard')
+      else                                                 navigate('/student/dashboard')
     } catch (err) {
       setLoginError(analyzeError(err, { page: '/login', action: 'login' }))
     } finally {
@@ -192,14 +192,6 @@ export default function Login() {
                 <ErrorCard analyzed={loginError} />
               </div>
             )}
-
-            {/* Hint */}
-            <div className="mt-6 p-3 bg-slate-50 rounded-xl border border-slate-200">
-              <p className="text-xs text-slate-500 font-medium mb-1">Demo credentials</p>
-              <p className="text-xs text-slate-600">
-                <span className="font-semibold">Trainer:</span> trainer@institute.com / trainer123
-              </p>
-            </div>
 
             <p className="text-center text-sm text-slate-500 mt-5">
               New trainer?{' '}

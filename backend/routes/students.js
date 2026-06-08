@@ -4,16 +4,19 @@ const db = require('../database');
 const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
-
-// All routes require authentication (trainer)
 router.use(authenticateToken);
 
-// Helper: verify batch belongs to trainer
-function getBatchForTrainer(batchId, trainerId) {
-  return db.prepare('SELECT * FROM batches WHERE id = ? AND trainer_id = ?').get(batchId, trainerId);
+const TRAINER_ROLES = ['trainer', 'owner', 'co_owner', 'admin'];
+
+// Trainer: batch must be theirs. Owner roles: any batch.
+function getBatch(batchId, user) {
+  if (['owner', 'co_owner', 'admin'].includes(user.role)) {
+    return db.prepare('SELECT * FROM batches WHERE id = ?').get(batchId);
+  }
+  return db.prepare('SELECT * FROM batches WHERE id = ? AND trainer_id = ?').get(batchId, user.id);
 }
 
-// GET /api/students/my-batches — Get batches a student is enrolled in
+// GET /api/students/my-batches — student only
 router.get('/my-batches', (req, res) => {
   try {
     if (req.user.role !== 'student') {
@@ -33,20 +36,20 @@ router.get('/my-batches', (req, res) => {
   }
 });
 
-// GET /api/students/batch/:batchId — Get all students in a batch
+// GET /api/students/batch/:batchId — trainer, owner, co_owner, admin
 router.get('/batch/:batchId', (req, res) => {
   try {
-    if (req.user.role !== 'trainer') {
-      return res.status(403).json({ error: 'Only trainers can view batch students' });
+    if (!TRAINER_ROLES.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Access denied' });
     }
 
-    const batch = getBatchForTrainer(req.params.batchId, req.user.id);
+    const batch = getBatch(req.params.batchId, req.user);
     if (!batch) {
       return res.status(404).json({ error: 'Batch not found' });
     }
 
     const students = db.prepare(`
-      SELECT u.id, u.name, u.email, bs.enrolled_at
+      SELECT u.id, u.name, u.email, u.status, bs.enrolled_at
       FROM batch_students bs
       JOIN users u ON bs.student_id = u.id
       WHERE bs.batch_id = ?
@@ -60,20 +63,19 @@ router.get('/batch/:batchId', (req, res) => {
   }
 });
 
-// POST /api/students/batch/:batchId — Add or create student and enroll in batch
+// POST /api/students/batch/:batchId — add/create student; trainer, owner, co_owner, admin
 router.post('/batch/:batchId', (req, res) => {
   try {
-    if (req.user.role !== 'trainer') {
-      return res.status(403).json({ error: 'Only trainers can add students to batches' });
+    if (!TRAINER_ROLES.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Access denied' });
     }
 
-    const batch = getBatchForTrainer(req.params.batchId, req.user.id);
+    const batch = getBatch(req.params.batchId, req.user);
     if (!batch) {
       return res.status(404).json({ error: 'Batch not found' });
     }
 
     const { name, email, password } = req.body;
-
     if (!email) {
       return res.status(400).json({ error: 'Email is required' });
     }
@@ -81,36 +83,24 @@ router.post('/batch/:batchId', (req, res) => {
     let student = db.prepare('SELECT * FROM users WHERE email = ? AND role = ?').get(email, 'student');
 
     if (!student) {
-      // Create new student
       if (!name) {
         return res.status(400).json({ error: 'Name is required to create a new student' });
       }
-
-      const plainPassword = password || 'student123';
-      const hashedPassword = bcrypt.hashSync(plainPassword, 10);
-
-      const result = db.prepare(`
-        INSERT INTO users (name, email, password, role)
-        VALUES (?, ?, ?, 'student')
-      `).run(name, email, hashedPassword);
-
+      const hashed = bcrypt.hashSync(password || 'student123', 10);
+      const result = db.prepare(
+        "INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, 'student')"
+      ).run(name, email, hashed);
       student = db.prepare('SELECT * FROM users WHERE id = ?').get(result.lastInsertRowid);
     }
 
-    // Check if already enrolled
-    const existingEnrollment = db.prepare(
+    const existing = db.prepare(
       'SELECT id FROM batch_students WHERE batch_id = ? AND student_id = ?'
     ).get(batch.id, student.id);
-
-    if (existingEnrollment) {
+    if (existing) {
       return res.status(409).json({ error: 'Student is already enrolled in this batch' });
     }
 
-    // Enroll student
-    db.prepare(`
-      INSERT INTO batch_students (batch_id, student_id)
-      VALUES (?, ?)
-    `).run(batch.id, student.id);
+    db.prepare('INSERT INTO batch_students (batch_id, student_id) VALUES (?, ?)').run(batch.id, student.id);
 
     const enrolled = db.prepare(`
       SELECT u.id, u.name, u.email, bs.enrolled_at
@@ -122,21 +112,21 @@ router.post('/batch/:batchId', (req, res) => {
     return res.status(201).json({ student: enrolled });
   } catch (err) {
     console.error('Add student error:', err);
-    if (err.message && err.message.includes('UNIQUE constraint failed')) {
+    if (err.message?.includes('UNIQUE constraint failed')) {
       return res.status(409).json({ error: 'Student is already enrolled in this batch' });
     }
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// DELETE /api/students/batch/:batchId/:studentId — Remove student from batch
+// DELETE /api/students/batch/:batchId/:studentId — trainer, owner, co_owner, admin
 router.delete('/batch/:batchId/:studentId', (req, res) => {
   try {
-    if (req.user.role !== 'trainer') {
-      return res.status(403).json({ error: 'Only trainers can remove students from batches' });
+    if (!TRAINER_ROLES.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Access denied' });
     }
 
-    const batch = getBatchForTrainer(req.params.batchId, req.user.id);
+    const batch = getBatch(req.params.batchId, req.user);
     if (!batch) {
       return res.status(404).json({ error: 'Batch not found' });
     }
@@ -144,12 +134,12 @@ router.delete('/batch/:batchId/:studentId', (req, res) => {
     const enrollment = db.prepare(
       'SELECT id FROM batch_students WHERE batch_id = ? AND student_id = ?'
     ).get(batch.id, req.params.studentId);
-
     if (!enrollment) {
       return res.status(404).json({ error: 'Student is not enrolled in this batch' });
     }
 
-    db.prepare('DELETE FROM batch_students WHERE batch_id = ? AND student_id = ?').run(batch.id, req.params.studentId);
+    db.prepare('DELETE FROM batch_students WHERE batch_id = ? AND student_id = ?')
+      .run(batch.id, req.params.studentId);
 
     return res.json({ message: 'Student removed from batch successfully' });
   } catch (err) {
