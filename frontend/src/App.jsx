@@ -26,6 +26,8 @@ import TrainerRequests        from './pages/TrainerRequests.jsx'
 import OwnerLeaveLog          from './pages/OwnerLeaveLog.jsx'
 import Messages               from './pages/Messages.jsx'
 import OwnerStaff             from './pages/OwnerStaff.jsx'
+import OwnerStudents          from './pages/OwnerStudents.jsx'
+import ResetPassword          from './pages/ResetPassword.jsx'
 
 export default function App() {
   return (
@@ -33,8 +35,9 @@ export default function App() {
     <AuthProvider>
       <Routes>
         {/* Public */}
-        <Route path="/login"           element={<Login />} />
-        <Route path="/trainer-signup"  element={<TrainerSignup />} />
+        <Route path="/login"                element={<Login />} />
+        <Route path="/trainer-signup"       element={<TrainerSignup />} />
+        <Route path="/reset-password/:token" element={<ResetPassword />} />
 
         {/* Owner routes */}
         <Route path="/owner" element={<ProtectedRoute role="owner"><OwnerLayout /></ProtectedRoute>}>
@@ -49,6 +52,7 @@ export default function App() {
           <Route path="leave-log"                    element={<OwnerLeaveLog />} />
           <Route path="messages"                     element={<Messages />} />
           <Route path="staff"                        element={<OwnerStaff />} />
+          <Route path="students"                     element={<OwnerStudents />} />
         </Route>
 
         {/* Trainer routes */}

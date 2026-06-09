@@ -309,6 +309,25 @@ function passwordResetEmail(userName, newPassword, portalLink) {
   return baseLayout('#1B3A6B', banner, body)
 }
 
+// ── Template 9 — Forgot Password ─────────────────────────────────────────────
+
+function passwordForgotEmail(userName, resetLink) {
+  const banner = `<p style="margin:0;font-size:14px;font-weight:bold;color:#ffffff;">Password Reset Request</p>`
+  const body = `
+    ${greeting(userName)}
+    <p style="margin:0 0 16px;font-size:14px;color:#475569;">We received a request to reset your password for your Define Digital Portal account. Click the button below to set a new password.</p>
+    ${ctaButton('RESET MY PASSWORD', resetLink, '#F97316')}
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin:16px 0;">
+      <tr><td style="padding:14px 16px;">
+        <p style="margin:0;font-size:12px;color:#64748b;">⏰ This link expires in <strong>1 hour</strong>.</p>
+        <p style="margin:8px 0 0;font-size:12px;color:#64748b;">🔒 <strong>Never share this link with anyone.</strong></p>
+      </td></tr>
+    </table>
+    <p style="margin:16px 0 0;font-size:12px;color:#94a3b8;text-align:center;">If you did not request a password reset, you can safely ignore this email. Your password will not be changed.</p>
+  `
+  return baseLayout('#F97316', banner, body)
+}
+
 // ── Test Email ─────────────────────────────────────────────────────────────────
 
 function testEmailHtml() {
@@ -342,4 +361,5 @@ module.exports = {
   appointmentConfirmedEmail,
   trainerNewLeaveRequestEmail,
   passwordResetEmail,
+  passwordForgotEmail,
 }

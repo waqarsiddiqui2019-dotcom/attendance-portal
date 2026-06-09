@@ -712,4 +712,102 @@ router.get('/leave-alerts', (req, res) => {
   }
 })
 
+// ── Student Management (enriched list) ───────────────────────────────────────
+
+// GET /api/owner/students-management
+router.get('/students-management', (req, res) => {
+  try {
+    const rows = db.prepare(`
+      SELECT
+        u.id, u.name, u.email, u.created_at,
+        b.id   AS batch_id,   b.name AS batch_name,
+        t.id   AS trainer_id, t.name AS trainer_name,
+        bs.enrolled_at,
+        COALESCE(att.total_days, 0) AS total_days,
+        COALESCE(att.present,    0) AS present,
+        COALESCE(att.absent,     0) AS absent,
+        COALESCE(att.late,       0) AS late,
+        CASE WHEN COALESCE(att.total_days, 0) > 0
+          THEN CAST(ROUND((COALESCE(att.present,0) + COALESCE(att.late,0)) * 100.0 / att.total_days) AS INTEGER)
+          ELSE 100 END AS attendance_pct,
+        att.last_active,
+        COALESCE(lv.informed_this_month, 0) AS informed_leaves_this_month
+      FROM users u
+      JOIN batch_students bs ON bs.student_id = u.id
+      JOIN batches b          ON b.id = bs.batch_id
+      JOIN users t            ON t.id = b.trainer_id
+      LEFT JOIN (
+        SELECT student_id, batch_id,
+          COUNT(*) AS total_days,
+          SUM(CASE WHEN status='present' THEN 1 ELSE 0 END) AS present,
+          SUM(CASE WHEN status='absent'  THEN 1 ELSE 0 END) AS absent,
+          SUM(CASE WHEN status='late'    THEN 1 ELSE 0 END) AS late,
+          MAX(date) AS last_active
+        FROM attendance GROUP BY student_id, batch_id
+      ) att ON att.student_id = u.id AND att.batch_id = b.id
+      LEFT JOIN (
+        SELECT student_id, batch_id, COUNT(*) AS informed_this_month
+        FROM leave_requests
+        WHERE status IN ('approved','counter_accepted')
+          AND substr(from_date,1,7) = strftime('%Y-%m','now')
+        GROUP BY student_id, batch_id
+      ) lv ON lv.student_id = u.id AND lv.batch_id = b.id
+      WHERE u.role = 'student'
+      ORDER BY u.name ASC
+    `).all();
+    return res.json({ students: rows });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/owner/student/:id/leaves-history
+router.get('/student/:id/leaves-history', (req, res) => {
+  try {
+    const leaves = db.prepare(`
+      SELECT lr.*,
+             b.name AS batch_name,
+             t.name AS trainer_name
+      FROM leave_requests lr
+      JOIN batches b ON b.id = lr.batch_id
+      JOIN users  t ON t.id = b.trainer_id
+      WHERE lr.student_id = ?
+      ORDER BY lr.created_at DESC
+    `).all(req.params.id);
+    return res.json({ leaves });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/owner/student/:id/attendance-summary
+router.get('/student/:id/attendance-summary', (req, res) => {
+  try {
+    const monthly = db.prepare(`
+      SELECT substr(date,1,7) AS month,
+        SUM(CASE WHEN status='present' THEN 1 ELSE 0 END) AS present,
+        SUM(CASE WHEN status='absent'  THEN 1 ELSE 0 END) AS absent,
+        SUM(CASE WHEN status='late'    THEN 1 ELSE 0 END) AS late,
+        COUNT(*) AS total
+      FROM attendance WHERE student_id = ?
+      GROUP BY month ORDER BY month DESC LIMIT 12
+    `).all(req.params.id);
+
+    const allTime = db.prepare(`
+      SELECT COUNT(*) AS total,
+        SUM(CASE WHEN status IN ('present','late') THEN 1 ELSE 0 END) AS attended
+      FROM attendance WHERE student_id = ?
+    `).get(req.params.id);
+
+    const pct = allTime.total > 0 ? Math.round(allTime.attended / allTime.total * 100) : 100;
+
+    return res.json({ monthly, all_time: { ...allTime, pct } });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 module.exports = router;

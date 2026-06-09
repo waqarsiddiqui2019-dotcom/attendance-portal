@@ -45,6 +45,10 @@ export const trainerSignup = (data) => api.post('/auth/trainer-signup', data)
 
 export const registerStudent = (data) => api.post('/auth/register-student', data)
 
+export const forgotPassword      = (email)              => api.post('/auth/forgot-password', { email })
+export const verifyResetToken    = (token)              => api.get(`/auth/verify-reset-token/${token}`)
+export const resetPasswordToken  = (token, newPassword) => api.post('/auth/reset-password', { token, newPassword })
+
 // ── Owner ─────────────────────────────────────────────────────────────────────
 export const getOwnerStats    = ()       => api.get('/owner/stats')
 export const getOwnerTrainers = ()       => api.get('/owner/trainers')
@@ -172,6 +176,11 @@ export const getOwnerLeaveStats  = ()       => api.get('/owner/leave-stats')
 export const getOwnerLeaves      = (params) => api.get('/owner/leaves', { params })
 export const getOwnerTrainerStats = ()      => api.get('/owner/trainer-stats')
 export const getOwnerLeaveAlerts  = ()      => api.get('/owner/leave-alerts')
+
+// ── Owner Student Management ─────────────────────────────────────────────────
+export const getOwnerStudentsManagement = ()   => api.get('/owner/students-management')
+export const getStudentLeavesHistory    = (id) => api.get(`/owner/student/${id}/leaves-history`)
+export const getStudentAttendanceSummary= (id) => api.get(`/owner/student/${id}/attendance-summary`)
 
 // ── Owner Staff ───────────────────────────────────────────────────────────────
 export const getOwnerStaff            = ()            => api.get('/owner/staff')

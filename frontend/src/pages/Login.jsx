@@ -1,38 +1,87 @@
 import React, { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { Eye, EyeOff, Mail, Lock, CheckCircle, X, HelpCircle } from 'lucide-react'
+import { Eye, EyeOff, Mail, Lock, CheckCircle, X, KeyRound, Send } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '../context/AuthContext.jsx'
 import { analyzeError } from '../utils/errorAnalyzer.js'
 import { ErrorCard } from '../utils/showError.jsx'
+import { forgotPassword } from '../api/index.js'
 
 function ForgotPasswordModal({ onClose }) {
+  const [email, setEmail]     = useState('')
+  const [loading, setLoading] = useState(false)
+  const [sent, setSent]       = useState(false)
+
+  const handleSend = async (e) => {
+    e.preventDefault()
+    if (!email.trim()) return
+    setLoading(true)
+    try {
+      await forgotPassword(email.trim())
+      setSent(true)
+    } catch {
+      // Still show success — never reveal if email exists
+      setSent(true)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-7 relative">
         <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition">
           <X size={18} />
         </button>
-        <div className="flex items-center gap-3 mb-5">
-          <div className="w-11 h-11 rounded-xl bg-brand-blue-light flex items-center justify-center flex-shrink-0">
-            <HelpCircle className="w-5 h-5 text-brand-blue" />
+
+        {sent ? (
+          <div className="text-center py-2">
+            <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="w-7 h-7 text-emerald-500" />
+            </div>
+            <h3 className="text-base font-bold text-slate-800 mb-2">Reset Link Sent!</h3>
+            <p className="text-sm text-slate-600 mb-1">
+              Check your inbox at <span className="font-semibold text-slate-800">{email}</span>.
+            </p>
+            <p className="text-sm text-slate-500 mb-1">The link expires in <strong>1 hour</strong>.</p>
+            <p className="text-xs text-slate-400 mt-3">Didn't receive it? Check your spam folder or contact the Define Digital admin team.</p>
+            <button onClick={onClose} className="mt-5 w-full bg-primary hover:bg-primary-dark text-white font-semibold py-2.5 rounded-xl text-sm transition">
+              Back to Login
+            </button>
           </div>
-          <div>
-            <h3 className="text-base font-bold text-slate-800">Forgot Your Password?</h3>
-            <p className="text-xs text-slate-500">We'll help you get back in</p>
-          </div>
-        </div>
-        <div className="bg-slate-50 rounded-xl p-4 text-sm text-slate-600 leading-relaxed space-y-3">
-          <p>Password resets are handled by your trainer or the <span className="font-semibold text-slate-800">Define Digital admin team</span>.</p>
-          <p>Please reach out to them directly and they can reset your password from the admin panel right away.</p>
-          <p className="text-xs text-slate-400">Self-service password reset via email is coming soon.</p>
-        </div>
-        <button
-          onClick={onClose}
-          className="mt-5 w-full bg-primary hover:bg-primary-dark text-white font-semibold py-2.5 rounded-xl text-sm transition shadow-sm shadow-primary/20"
-        >
-          Got it
-        </button>
+        ) : (
+          <>
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-11 h-11 rounded-xl bg-primary-light flex items-center justify-center flex-shrink-0">
+                <KeyRound className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-800">Reset Your Password</h3>
+                <p className="text-xs text-slate-500">Enter your email and we'll send a reset link</p>
+              </div>
+            </div>
+            <form onSubmit={handleSend} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Email Address</label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type="email" value={email} onChange={e => setEmail(e.target.value)}
+                    placeholder="your@email.com" required autoFocus
+                    className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white placeholder:text-slate-400 transition"
+                  />
+                </div>
+              </div>
+              <button type="submit" disabled={loading || !email.trim()}
+                className="w-full bg-primary hover:bg-primary-dark text-white font-semibold py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 disabled:opacity-60 transition">
+                {loading ? <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Sending...</> : <><Send size={14} /> Send Reset Link</>}
+              </button>
+            </form>
+            <button onClick={onClose} className="mt-3 w-full text-sm text-slate-500 hover:text-slate-700 transition py-1">
+              Back to Login
+            </button>
+          </>
+        )}
       </div>
     </div>
   )
