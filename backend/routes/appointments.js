@@ -2,6 +2,7 @@ const express = require('express')
 const db = require('../database')
 const { authenticateToken } = require('../middleware/auth')
 const notify = require('../utils/notify')
+const { sendEmail, appointmentConfirmedEmail } = require('../utils/emailService')
 
 const router = express.Router()
 router.use(authenticateToken)
@@ -130,6 +131,14 @@ router.put('/:id/confirm', (req, res) => {
 
     const trainer = db.prepare('SELECT name FROM users WHERE id=?').get(req.user.id)
     notify(ar.student_id, 'Appointment Confirmed ✅', `Your appointment on ${ar.preferred_date} at ${ar.preferred_time} has been confirmed by ${trainer.name}.`, 'success', 'appointment', ar.id)
+
+    // Email student
+    try {
+      const student = db.prepare('SELECT name, email FROM users WHERE id=?').get(ar.student_id)
+      if (student?.email) {
+        sendEmail(student.email, `Appointment Confirmed — ${ar.preferred_date} at ${ar.preferred_time}`, appointmentConfirmedEmail(student.name, ar.preferred_date, ar.preferred_time, ar.duration_minutes, trainer.name, ar.mode, ar.topic_question)).catch(() => {})
+      }
+    } catch (e) { console.error('[Email] appointment confirm email error (non-fatal):', e.message) }
 
     return res.json({ message: 'Confirmed', appointment: db.prepare('SELECT * FROM appointment_requests WHERE id=?').get(ar.id) })
   } catch (err) {

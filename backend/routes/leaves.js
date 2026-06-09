@@ -2,6 +2,7 @@ const express = require('express')
 const db = require('../database')
 const { authenticateToken } = require('../middleware/auth')
 const notify = require('../utils/notify')
+const { sendEmail, leaveRequestReceivedEmail, trainerNewLeaveRequestEmail, leaveApprovedEmail, leaveRejectedEmail } = require('../utils/emailService')
 
 const router = express.Router()
 router.use(authenticateToken)
@@ -271,7 +272,8 @@ router.post('/', (req, res) => {
     if (!enrolled) return res.status(404).json({ error: 'Batch not found or not enrolled' })
 
     const batch = db.prepare('SELECT trainer_id, name FROM batches WHERE id=?').get(batch_id)
-    const student = db.prepare('SELECT name FROM users WHERE id=?').get(req.user.id)
+    const student = db.prepare('SELECT id, name, email FROM users WHERE id=?').get(req.user.id)
+    const trainer = db.prepare('SELECT id, name, email FROM users WHERE id=?').get(batch.trainer_id)
 
     const result = db.prepare(`
       INSERT INTO leave_requests (student_id, batch_id, leave_type, leave_type_note, from_date, to_date, reason)
@@ -292,6 +294,14 @@ router.post('/', (req, res) => {
 
     // Notify student (confirmation)
     notify(req.user.id, 'Leave Request Submitted', `Your ${leave_type} leave request for ${from_date}–${to_date} has been submitted and is pending review.`, 'info', 'leave', leaveId)
+
+    // Send emails (failures are silent)
+    const portalLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/student/requests`
+    const trainerPortalLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/trainer/requests`
+    try {
+      if (student?.email) sendEmail(student.email, 'Leave Request Submitted — Awaiting Review', leaveRequestReceivedEmail(student.name, from_date, to_date, leave_type, portalLink)).catch(() => {})
+      if (trainer?.email) sendEmail(trainer.email, leave_type === 'emergency' ? `🚨 URGENT — Emergency Leave Request from ${student.name}` : `New Leave Request — ${student.name} — ${from_date}`, trainerNewLeaveRequestEmail(trainer.name, student.name, from_date, to_date, leave_type, leave_type === 'emergency', trainerPortalLink)).catch(() => {})
+    } catch (e) { console.error('[Email] leave submit email error (non-fatal):', e.message) }
 
     const lr = db.prepare('SELECT * FROM leave_requests WHERE id=?').get(leaveId)
     return res.status(201).json({ leave: lr })
@@ -326,6 +336,14 @@ router.put('/:id/approve', (req, res) => {
     const approver = db.prepare('SELECT name FROM users WHERE id=?').get(req.user.id)
     notify(lr.student_id, 'Leave Approved ✅', `Your ${lr.leave_type} leave from ${lr.from_date} to ${lr.to_date} has been approved by ${approver.name}.${trainer_note ? ' Note: ' + trainer_note : ''}`, 'success', 'leave', lr.id)
 
+    // Email student
+    try {
+      const student = db.prepare('SELECT name, email FROM users WHERE id=?').get(lr.student_id)
+      if (student?.email) {
+        sendEmail(student.email, `Leave Approved — ${lr.from_date} to ${lr.to_date}`, leaveApprovedEmail(student.name, lr.from_date, lr.to_date, approver.name, [], false, null, null)).catch(() => {})
+      }
+    } catch (e) { console.error('[Email] leave approve email error (non-fatal):', e.message) }
+
     return res.json({ message: 'Leave approved', leave: db.prepare('SELECT * FROM leave_requests WHERE id=?').get(lr.id) })
   } catch (err) {
     console.error(err); return res.status(500).json({ error: 'Internal server error' })
@@ -358,6 +376,15 @@ router.put('/:id/reject', (req, res) => {
       .run(rejection_reason.trim(), lr.id)
 
     notify(lr.student_id, 'Leave Request Rejected ❌', `Your ${lr.leave_type} leave from ${lr.from_date} to ${lr.to_date} was rejected. Reason: ${rejection_reason.trim()}`, 'error', 'leave', lr.id)
+
+    // Email student
+    try {
+      const student = db.prepare('SELECT name, email FROM users WHERE id=?').get(lr.student_id)
+      const reviewer = db.prepare('SELECT name FROM users WHERE id=?').get(req.user.id)
+      if (student?.email) {
+        sendEmail(student.email, 'Leave Request Update — Action Required', leaveRejectedEmail(student.name, lr.from_date, lr.to_date, reviewer.name, rejection_reason.trim())).catch(() => {})
+      }
+    } catch (e) { console.error('[Email] leave reject email error (non-fatal):', e.message) }
 
     return res.json({ message: 'Leave rejected', leave: db.prepare('SELECT * FROM leave_requests WHERE id=?').get(lr.id) })
   } catch (err) {

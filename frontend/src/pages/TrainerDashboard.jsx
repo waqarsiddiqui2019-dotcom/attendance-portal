@@ -9,7 +9,7 @@ import {
   Plus,
   CalendarDays,
 } from 'lucide-react'
-import { format, isWithinInterval, parseISO } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { getBatches } from '../api/index.js'
 import { useAuth } from '../context/AuthContext.jsx'
 
@@ -20,7 +20,7 @@ function getGreeting() {
   return 'Good evening'
 }
 
-function StatCard({ icon: Icon, label, value, color, bgColor, trend }) {
+function StatCard({ icon: Icon, label, value, color, bgColor, trend, subtitle }) {
   return (
     <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
       <div className="flex items-center justify-between mb-4">
@@ -35,6 +35,7 @@ function StatCard({ icon: Icon, label, value, color, bgColor, trend }) {
       </div>
       <p className="text-2xl font-bold text-slate-800 mb-0.5">{value}</p>
       <p className="text-sm text-slate-500">{label}</p>
+      {subtitle && <p className="text-xs text-slate-400 mt-1">{subtitle}</p>}
     </div>
   )
 }
@@ -62,16 +63,8 @@ export default function TrainerDashboard() {
   const today = new Date()
   const todayStr = format(today, 'yyyy-MM-dd')
 
-  const activeBatches = batches.filter((b) => {
-    try {
-      return isWithinInterval(today, {
-        start: parseISO(b.start_date),
-        end: parseISO(b.end_date),
-      })
-    } catch {
-      return false
-    }
-  })
+  const activeBatches   = batches.filter((b) => (b.status || 'active') === 'active')
+  const inactiveBatches = batches.filter((b) => b.status === 'inactive')
 
   const totalStudents = dashData.unique_student_count ?? 0
   const todayLabel    = dashData.today_total > 0
@@ -82,6 +75,10 @@ export default function TrainerDashboard() {
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     .slice(0, 3)
 
+  const totalBatchSubtitle = inactiveBatches.length > 0
+    ? `${activeBatches.length} active · ${inactiveBatches.length} inactive`
+    : null
+
   const stats = [
     {
       icon: BookOpen,
@@ -89,6 +86,7 @@ export default function TrainerDashboard() {
       value: batches.length,
       color: 'text-primary',
       bgColor: 'bg-primary-light',
+      subtitle: totalBatchSubtitle,
     },
     {
       icon: Users,

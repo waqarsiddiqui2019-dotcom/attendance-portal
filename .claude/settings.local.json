@@ -30,7 +30,31 @@
       "Bash(git config *)",
       "Bash(git commit *)",
       "Skill(update-config)",
-      "Bash(npx vite *)"
+      "Bash(npx vite *)",
+      "Bash(Start-Sleep -Seconds 3)",
+      "Bash(Invoke-WebRequest -Uri \"http://localhost:5000/api/health\" -Method GET -UseBasicParsing)",
+      "Bash(Select-Object -ExpandProperty Content)",
+      "Bash(curl -s http://localhost:5000/api/health)",
+      "Bash(curl -s -H 'Authorization: Bearer __TRACKED_VAR__' http://localhost:5000/api/topic-sets)",
+      "Bash(curl -s -X POST -H 'Authorization: Bearer __TRACKED_VAR__' -H 'Content-Type: application/json' -d '{\"items\":[{\"title\":\"SEO Basics\",\"description\":null,\"duration_hours\":2,\"mode\":\"online\"},{\"title\":\"Google Ads\",\"description\":null,\"duration_hours\":3,\"mode\":\"offline\"},{\"title\":\"Social Media\",\"description\":null,\"duration_hours\":1.5,\"mode\":\"online\"}]}' http://localhost:5000/api/topic-sets/3/items)",
+      "Bash(curl -s -H 'Authorization: Bearer __TRACKED_VAR__' http://localhost:5000/api/topic-sets/3/items)",
+      "Bash(curl -s -X DELETE -H 'Authorization: Bearer __TRACKED_VAR__' http://localhost:5000/api/topic-sets/3)",
+      "Bash(netstat -ano)",
+      "Bash(taskkill //F //PID 31236)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000)",
+      "Bash(awk '{print $5}')",
+      "Bash(xargs -I{} taskkill //F //PID {})",
+      "Bash(del *)",
+      "PowerShell(Get-Process *)",
+      "PowerShell($login = Invoke-RestMethod -Uri \"http://localhost:5000/api/auth/login\" -Method Post -ContentType \"application/json\" -Body '{\"email\":\"trainer@institute.com\",\"password\":\"trainer123\"}'; $token = $login.token; Write-Host \"Token OK:\" \\($token -ne $null\\); $batches = Invoke-RestMethod -Uri \"http://localhost:5000/api/batches\" -Method Get -Headers @{Authorization=\"Bearer $token\"}; Write-Host \"Batches count:\" $batches.batches.Count; Write-Host \"unique_student_count:\" $batches.unique_student_count; Write-Host \"today_present:\" $batches.today_present; Write-Host \"today_total:\" $batches.today_total)",
+      "PowerShell(Start-Process \"cmd\" -ArgumentList \"/k cd /d C:\\\\Users\\\\waqar\\\\Desktop\\\\attendance-portal\\\\backend && node server.js\" -WindowStyle Normal)",
+      "PowerShell(Start-Process \"cmd\" -ArgumentList \"/k cd /d C:\\\\Users\\\\waqar\\\\Desktop\\\\attendance-portal\\\\frontend && npm run dev\" -WindowStyle Normal)",
+      "PowerShell(netstat *)",
+      "Bash(curl -s http://localhost:5000/api/messages/contacts -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NywiZW1haWwiOiJ3YXFhckBkZWZpbmVkaWdpdGFsLmluIiwicm9sZSI6Im93bmVyIiwibmFtZSI6IldhcWFyIiwiaWF0IjoxNzgwNzc3NDAxLCJleHAiOjE3ODEzODIyMDF9.sE7sep-hemnA_XiFij85DarB79C6IEZexyQOD65_HEk')",
+      "Bash(curl -s http://localhost:5000/api/leaves -H \"Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiZW1haWwiOiJ0cmFpbmVyQGluc3RpdHV0ZS5jb20iLCJyb2xlIjoidHJhaW5lciIsIm5hbWUiOiJBZG1pbiBUcmFpbmVyIiwiaWF0IjoxNzgwNzc3NDAxLCJleHAiOjE3ODEzODIyMDF9.RrEBpUEAIZNyBexxNduJkl5VdpJg-hya8f0owScbI_Y\")",
+      "Bash(python3 -c \"import sys,json;d=json.load\\(sys.stdin\\);print\\('Leaves:',len\\(d['leaves']\\),[l['status'] for l in d['leaves']]\\)\")",
+      "Bash(cat frontend/vite.config.js)",
+      "Bash(cat frontend/vite.config.ts)"
     ]
   }
 }

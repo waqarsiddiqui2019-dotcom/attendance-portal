@@ -2,6 +2,7 @@ const express = require('express');
 const db = require('../database');
 const bcrypt = require('bcryptjs');
 const { authenticateToken, requireOwner, requireRootOwner } = require('../middleware/auth');
+const { sendEmail, passwordResetEmail } = require('../utils/emailService');
 
 const router = express.Router();
 router.use(authenticateToken, requireOwner);
@@ -9,11 +10,14 @@ router.use(authenticateToken, requireOwner);
 // GET /api/owner/stats
 router.get('/stats', (req, res) => {
   try {
-    const trainers  = db.prepare("SELECT COUNT(*) as c FROM users WHERE role='trainer' AND status='active'").get().c;
-    const pending   = db.prepare("SELECT COUNT(*) as c FROM users WHERE role='trainer' AND status='pending'").get().c;
-    const students  = db.prepare("SELECT COUNT(*) as c FROM users WHERE role='student'").get().c;
-    const batches   = db.prepare("SELECT COUNT(*) as c FROM batches").get().c;
-    return res.json({ trainers, pending, students, batches });
+    const trainers        = db.prepare("SELECT COUNT(*) as c FROM users WHERE role='trainer' AND status='active'").get().c;
+    const inactive        = db.prepare("SELECT COUNT(*) as c FROM users WHERE role='trainer' AND status='inactive'").get().c;
+    const pending         = db.prepare("SELECT COUNT(*) as c FROM users WHERE role='trainer' AND status='pending'").get().c;
+    const students        = db.prepare("SELECT COUNT(*) as c FROM users WHERE role='student'").get().c;
+    const batches         = db.prepare("SELECT COUNT(*) as c FROM batches").get().c;
+    const activeBatches   = db.prepare("SELECT COUNT(*) as c FROM batches WHERE status='active' OR status IS NULL").get().c;
+    const inactiveBatches = db.prepare("SELECT COUNT(*) as c FROM batches WHERE status='inactive'").get().c;
+    return res.json({ trainers, inactive, pending, students, batches, activeBatches, inactiveBatches });
   } catch (err) {
     console.error('Owner stats error:', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -63,6 +67,50 @@ router.put('/trainers/:id/reject', (req, res) => {
     return res.json({ message: 'Trainer rejected' });
   } catch (err) {
     console.error('Reject trainer error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PATCH /api/owner/trainers/:id/toggle-status — activate or deactivate a trainer
+router.patch('/trainers/:id/toggle-status', (req, res) => {
+  try {
+    const trainer = db.prepare("SELECT id, name, status FROM users WHERE id=? AND role='trainer'").get(req.params.id);
+    if (!trainer) return res.status(404).json({ error: 'Trainer not found' });
+    if (!['active', 'inactive'].includes(trainer.status)) {
+      return res.status(400).json({ error: 'Only active or inactive trainers can be toggled' });
+    }
+    const newStatus = trainer.status === 'active' ? 'inactive' : 'active';
+    db.prepare("UPDATE users SET status=? WHERE id=?").run(newStatus, trainer.id);
+    return res.json({ status: newStatus, message: `${trainer.name} has been ${newStatus === 'inactive' ? 'deactivated' : 'reactivated'}` });
+  } catch (err) {
+    console.error('Toggle trainer status error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PATCH /api/owner/users/:id/reset-password
+router.patch('/users/:id/reset-password', (req, res) => {
+  try {
+    const { newPassword } = req.body;
+    if (!newPassword || newPassword.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
+    const user = db.prepare("SELECT id, name, email FROM users WHERE id=?").get(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const hashed = bcrypt.hashSync(newPassword, 10);
+    db.prepare("UPDATE users SET password=? WHERE id=?").run(hashed, user.id);
+
+    // Email the user their new password
+    try {
+      if (user.email) {
+        const loginLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`;
+        sendEmail(user.email, 'Your Password Has Been Reset — Define Digital', passwordResetEmail(user.name, newPassword, loginLink)).catch(() => {});
+      }
+    } catch (e) { console.error('[Email] password reset email error (non-fatal):', e.message); }
+
+    return res.json({ message: `Password reset for ${user.name}` });
+  } catch (err) {
+    console.error('Reset password error:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -593,14 +641,14 @@ router.get('/trainer-stats', (req, res) => {
   try {
     const mon = new Date().toISOString().slice(0, 7)
     const trainers = db.prepare(`
-      SELECT u.id, u.name, u.email,
+      SELECT u.id, u.name, u.email, u.status,
              COUNT(DISTINCT b.id) AS batch_count,
              COUNT(DISTINCT bs.student_id) AS student_count
       FROM users u
       LEFT JOIN batches b ON b.trainer_id = u.id
       LEFT JOIN batch_students bs ON bs.batch_id = b.id
-      WHERE u.role = 'trainer' AND u.status = 'active'
-      GROUP BY u.id ORDER BY u.name ASC
+      WHERE u.role = 'trainer' AND u.status IN ('active','inactive')
+      GROUP BY u.id ORDER BY u.status ASC, u.name ASC
     `).all()
 
     const enriched = trainers.map(t => {

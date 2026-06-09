@@ -21,7 +21,8 @@ const topicSetsRoutes   = require('./routes/topic-sets');
 const leavesRoutes        = require('./routes/leaves');
 const appointmentsRoutes  = require('./routes/appointments');
 const notificationsRoutes = require('./routes/notifications');
-const messagesRoutes      = require('./routes/messages');
+const messagesRoutes          = require('./routes/messages');
+const confirmAttendanceRoutes = require('./routes/confirm-attendance');
 
 const app = express();
 const PORT = 5000;
@@ -42,6 +43,7 @@ app.use('/api/leaves', leavesRoutes);
 app.use('/api/appointments', appointmentsRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/messages', messagesRoutes);
+app.use('/api/confirm-attendance', confirmAttendanceRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

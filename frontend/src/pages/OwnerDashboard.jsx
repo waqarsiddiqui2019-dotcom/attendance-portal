@@ -10,7 +10,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 
 const LEAVE_ICONS = { medical:'🏥', personal:'👤', emergency:'🚨', family:'👨‍👩‍👧', other:'📝' }
 
-function StatCard({ icon: Icon, label, value, color, bg, to }) {
+function StatCard({ icon: Icon, label, value, color, bg, to, subtitle }) {
   const inner = (
     <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm hover:shadow-md transition-shadow h-full">
       <div className={`w-11 h-11 ${bg} rounded-xl flex items-center justify-center mb-3`}>
@@ -18,6 +18,7 @@ function StatCard({ icon: Icon, label, value, color, bg, to }) {
       </div>
       <p className="text-2xl font-bold text-slate-800 mb-0.5">{value}</p>
       <p className="text-sm text-slate-500">{label}</p>
+      {subtitle && <p className="text-xs text-slate-400 mt-1">{subtitle}</p>}
     </div>
   )
   return to ? <Link to={to}>{inner}</Link> : <div>{inner}</div>
@@ -42,7 +43,7 @@ function fmtDate(d) {
 
 export default function OwnerDashboard() {
   const { user } = useAuth()
-  const [stats, setStats]           = useState({ trainers: 0, pending: 0, students: 0, batches: 0 })
+  const [stats, setStats]           = useState({ trainers: 0, inactive: 0, pending: 0, students: 0, batches: 0, activeBatches: 0, inactiveBatches: 0 })
   const [recentBatches, setRecentBatches] = useState([])
   const [trainerStats, setTrainerStats]   = useState([])
   const [alerts, setAlerts]               = useState({ overdue_48h: [], recently_rejected: [] })
@@ -139,10 +140,15 @@ export default function OwnerDashboard() {
 
       {/* Stats cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard icon={Users}         label="Active Trainers"   value={stats.trainers} color="text-primary"     bg="bg-primary-light"    to="/owner/team" />
-        <StatCard icon={GraduationCap} label="Total Students"    value={stats.students} color="text-brand-blue"  bg="bg-brand-blue-light" />
-        <StatCard icon={BookOpen}      label="Total Batches"     value={stats.batches}  color="text-emerald-600" bg="bg-emerald-50"        to="/owner/batches" />
-        <StatCard icon={Clock}         label="Pending Approvals" value={stats.pending}
+        <StatCard icon={Users} label="Active Trainers" value={stats.trainers}
+          color="text-primary" bg="bg-primary-light" to="/owner/team"
+          subtitle={stats.inactive > 0 ? `${stats.inactive} inactive` : undefined} />
+        <StatCard icon={GraduationCap} label="Total Students" value={stats.students}
+          color="text-brand-blue" bg="bg-brand-blue-light" />
+        <StatCard icon={BookOpen} label="Total Batches" value={stats.batches}
+          color="text-emerald-600" bg="bg-emerald-50" to="/owner/batches"
+          subtitle={stats.inactiveBatches > 0 ? `${stats.activeBatches} active · ${stats.inactiveBatches} inactive` : undefined} />
+        <StatCard icon={Clock} label="Pending Approvals" value={stats.pending}
           color={stats.pending > 0 ? 'text-rose-600' : 'text-slate-400'}
           bg={stats.pending > 0 ? 'bg-rose-50' : 'bg-slate-100'}
           to="/owner/team" />
@@ -155,21 +161,24 @@ export default function OwnerDashboard() {
           <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
             {trainerStats.map(t => {
               const totalPending = t.pending_leaves + t.pending_appts
+              const isInactive = t.status === 'inactive'
               return (
-                <div key={t.id} className={`bg-white border rounded-2xl p-4 ${totalPending > 0 ? 'border-amber-200' : 'border-slate-200'}`}>
+                <div key={t.id} className={`bg-white border rounded-2xl p-4 transition ${isInactive ? 'opacity-60 border-slate-200' : totalPending > 0 ? 'border-amber-200' : 'border-slate-200'}`}>
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="w-9 h-9 rounded-full bg-[#2272B9] flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${isInactive ? 'bg-slate-200 text-slate-500' : 'bg-[#2272B9] text-white'}`}>
                       {t.name?.charAt(0)?.toUpperCase()}
                     </div>
                     <div className="min-w-0">
                       <p className="font-semibold text-slate-800 text-sm truncate">{t.name}</p>
                       <p className="text-xs text-slate-400">{t.batch_count} batch{t.batch_count !== 1 ? 'es' : ''} · {t.student_count} students</p>
                     </div>
-                    {totalPending > 0 && (
+                    {isInactive ? (
+                      <span className="ml-auto text-xs font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full flex-shrink-0">Inactive</span>
+                    ) : totalPending > 0 ? (
                       <span className="ml-auto text-xs font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full flex-shrink-0">
                         {totalPending} pending
                       </span>
-                    )}
+                    ) : null}
                   </div>
                   <div className="grid grid-cols-4 gap-1 text-center text-xs">
                     {[
@@ -306,8 +315,11 @@ export default function OwnerDashboard() {
           <div className="mt-4 rounded-2xl p-5 text-white"
             style={{ background: 'linear-gradient(135deg, #1B3A6B 0%, #2272B9 100%)' }}>
             <p className="text-blue-200 text-xs font-medium uppercase tracking-wider mb-3">Institute Overview</p>
-            <p className="text-2xl font-bold mb-1">{stats.trainers} Trainers</p>
-            <p className="text-blue-200 text-sm">{stats.students} students across {stats.batches} batches</p>
+            <p className="text-2xl font-bold mb-1">{stats.trainers} Active Trainers</p>
+            <p className="text-blue-200 text-sm">
+              {stats.students} students · {stats.batches} batches
+              {stats.inactive > 0 && ` · ${stats.inactive} inactive`}
+            </p>
             {(overdue.length > 0 || rejected.length > 0) && (
               <div className="mt-3 pt-3 border-t border-white/20 space-y-1">
                 {overdue.length > 0 && <p className="text-xs text-rose-300 font-medium">⏱ {overdue.length} leave{overdue.length > 1 ? 's' : ''} overdue 48h</p>}

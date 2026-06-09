@@ -63,6 +63,32 @@ if (usersExists) {
   }
 }
 
+// ── Migration: add 'inactive' to users status constraint ─────────────────────
+{
+  const row = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get();
+  if (row && !row.sql.includes('inactive')) {
+    console.log('[DB] Migrating: adding inactive to user status constraint...');
+    db.pragma('foreign_keys = OFF');
+    db.exec(`
+      CREATE TABLE users_inactive_new (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        name        TEXT NOT NULL,
+        email       TEXT UNIQUE NOT NULL,
+        password    TEXT NOT NULL,
+        role        TEXT NOT NULL CHECK(role IN ('owner','co_owner','admin','trainer','student')),
+        status      TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','pending','rejected','inactive')),
+        created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+        last_seen   DATETIME
+      );
+      INSERT INTO users_inactive_new SELECT id, name, email, password, role, status, created_at, last_seen FROM users;
+      DROP TABLE users;
+      ALTER TABLE users_inactive_new RENAME TO users;
+    `);
+    db.pragma('foreign_keys = ON');
+    console.log('[DB] Inactive status migration complete.');
+  }
+}
+
 db.pragma('foreign_keys = ON');
 
 // ── Migrate: add last_seen to users ──────────────────────────────────────
@@ -87,6 +113,23 @@ if (!batchCols.includes('sessions_per_week')) {
 if (!batchCols.includes('class_days')) {
   db.exec(`ALTER TABLE batches ADD COLUMN class_days TEXT`);
   console.log('[DB] Added class_days column to batches');
+}
+if (!batchCols.includes('status')) {
+  db.exec(`ALTER TABLE batches ADD COLUMN status TEXT DEFAULT 'active'`);
+  console.log('[DB] Added status column to batches');
+}
+
+// ── Migrate: add confirmation tracking to attendance ─────────────────────
+{
+  const attCols = db.prepare('PRAGMA table_info(attendance)').all().map(c => c.name)
+  if (!attCols.includes('confirm_token')) {
+    db.exec('ALTER TABLE attendance ADD COLUMN confirm_token TEXT')
+    console.log('[DB] Added confirm_token to attendance')
+  }
+  if (!attCols.includes('confirmed_at')) {
+    db.exec('ALTER TABLE attendance ADD COLUMN confirmed_at DATETIME')
+    console.log('[DB] Added confirmed_at to attendance')
+  }
 }
 
 // ── Migrate: add columns to topics ───────────────────────────────────────
@@ -116,7 +159,7 @@ db.exec(`
     email       TEXT UNIQUE NOT NULL,
     password    TEXT NOT NULL,
     role        TEXT NOT NULL CHECK(role IN ('owner','co_owner','admin','trainer','student')),
-    status      TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','pending','rejected')),
+    status      TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','pending','rejected','inactive')),
     created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -130,6 +173,7 @@ db.exec(`
     mode              TEXT DEFAULT 'offline',
     sessions_per_week INTEGER,
     class_days        TEXT,
+    status            TEXT DEFAULT 'active',
     created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (trainer_id) REFERENCES users(id)
   );
@@ -145,13 +189,15 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS attendance (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    batch_id    INTEGER NOT NULL,
-    student_id  INTEGER NOT NULL,
-    date        TEXT NOT NULL,
-    status      TEXT NOT NULL CHECK(status IN ('present','absent','late')),
-    marked_by   INTEGER NOT NULL,
-    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    batch_id      INTEGER NOT NULL,
+    student_id    INTEGER NOT NULL,
+    date          TEXT NOT NULL,
+    status        TEXT NOT NULL CHECK(status IN ('present','absent','late')),
+    marked_by     INTEGER NOT NULL,
+    confirm_token TEXT,
+    confirmed_at  DATETIME,
+    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (batch_id)   REFERENCES batches(id) ON DELETE CASCADE,
     FOREIGN KEY (student_id) REFERENCES users(id),
     FOREIGN KEY (marked_by)  REFERENCES users(id),

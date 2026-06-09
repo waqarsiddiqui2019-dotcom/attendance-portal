@@ -17,6 +17,13 @@ router.post('/login', (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
+    if (user.status === 'inactive') {
+      return res.status(403).json({
+        error: 'Your account has been deactivated. Please contact Define Digital admin.',
+        status: 'inactive'
+      });
+    }
+
     // Block trainers that are not yet approved
     if (user.role === 'trainer') {
       if (user.status === 'pending') {

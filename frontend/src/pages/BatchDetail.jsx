@@ -4,6 +4,7 @@ import {
   ChevronRight, UserPlus, Trash2, Calendar, Users, BarChart3, X, Loader2,
   CheckCircle, XCircle, Clock, FileText, Download, AlertCircle, BookOpen,
   Plus, Edit2, ArrowUp, ArrowDown, Shuffle, Wifi, Building2, Mail, UserCircle2,
+  PowerOff, KeyRound, Eye, EyeOff,
 } from 'lucide-react'
 import { format, parseISO, addDays } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -14,6 +15,7 @@ import {
   getBatch, getStudents, addStudent, removeStudent,
   getAttendanceByDate, markAttendance, getAttendanceSummary,
   getSyllabus, saveSyllabus, distributeTopics, getTopics,
+  toggleBatchStatus, resetStudentPassword,
 } from '../api/index.js'
 import SmartPlanner from '../components/SmartPlanner.jsx'
 import { showError } from '../utils/showError.jsx'
@@ -123,6 +125,78 @@ function AccountStatusBadge({ status }) {
       <span className={`w-1.5 h-1.5 rounded-full ${dot[status] || 'bg-slate-400'}`} />
       {status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Unknown'}
     </span>
+  )
+}
+
+// ── ResetStudentPasswordModal ─────────────────────────────────────────────────
+function ResetStudentPasswordModal({ student, onClose }) {
+  const [pw, setPw]         = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [show, setShow]     = useState(false)
+  const [loading, setLoading] = useState(false)
+  if (!student) return null
+  const canSubmit = pw.length >= 8 && pw === confirm
+
+  const handleReset = async () => {
+    setLoading(true)
+    try {
+      await resetStudentPassword(student.id, pw)
+      toast.success(`Password for ${student.name} has been reset successfully.`)
+      onClose()
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Reset failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+        <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-slate-200">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-primary-light flex items-center justify-center">
+              <KeyRound size={16} className="text-primary" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-slate-800">Reset Password</h2>
+              <p className="text-xs text-slate-500">{student.name}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 transition">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1.5">New Password <span className="text-rose-500">*</span></label>
+            <div className="relative">
+              <input type={show ? 'text' : 'password'} value={pw} onChange={e => setPw(e.target.value)}
+                placeholder="Min. 8 characters"
+                className="w-full px-3.5 pr-10 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition" />
+              <button type="button" onClick={() => setShow(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                {show ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1.5">Confirm Password <span className="text-rose-500">*</span></label>
+            <input type={show ? 'text' : 'password'} value={confirm} onChange={e => setConfirm(e.target.value)}
+              placeholder="Re-enter new password"
+              className={`w-full px-3.5 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition ${confirm && pw !== confirm ? 'border-rose-300 bg-rose-50' : 'border-slate-200'}`} />
+            {confirm && pw !== confirm && <p className="text-xs text-rose-600 mt-1">Passwords do not match</p>}
+          </div>
+          {pw.length > 0 && pw.length < 8 && <p className="text-xs text-amber-600">Password must be at least 8 characters</p>}
+        </div>
+        <div className="flex gap-3 px-6 pb-6">
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 border border-slate-200 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition">Cancel</button>
+          <button onClick={handleReset} disabled={!canSubmit || loading}
+            className="flex-1 bg-primary hover:bg-primary-dark disabled:opacity-40 text-white px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition">
+            {loading ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />} Reset Password
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -560,6 +634,8 @@ export default function BatchDetail() {
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [plannerOpen, setPlannerOpen] = useState(false)
   const [calendarTopics, setCalendarTopics] = useState([])
+  const [toggleLoading, setToggleLoading] = useState(false)
+  const [resetPasswordStudent, setResetPasswordStudent] = useState(null)
 
   const fetchBatch = useCallback(async () => {
     try {
@@ -656,8 +732,20 @@ export default function BatchDetail() {
 
   const formatDate = (d) => { try { return d ? format(parseISO(d), 'MMM d, yyyy') : '—' } catch { return '—' } }
 
+  const handleToggleBatchStatus = async () => {
+    setToggleLoading(true)
+    try {
+      const res = await toggleBatchStatus(id)
+      setBatch(prev => ({ ...prev, status: res.data.status }))
+      toast.success(res.data.status === 'active' ? 'Batch reactivated!' : 'Batch marked inactive')
+    } catch (err) { showError(err, { action: 'toggle-batch-status' }) }
+    finally { setToggleLoading(false) }
+  }
+
   if (loading) return <div className="flex items-center justify-center py-32"><div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" /></div>
   if (!batch) return <div className="text-center py-32"><AlertCircle className="w-10 h-10 text-slate-300 mx-auto mb-3" /><p className="text-slate-500">Batch not found</p></div>
+
+  const batchIsInactive = (batch.status || 'active') === 'inactive'
 
   return (
     <>
@@ -668,12 +756,27 @@ export default function BatchDetail() {
         <span className="text-slate-800 font-medium truncate">{batch.name}</span>
       </div>
 
+      {/* Inactive warning banner */}
+      {batchIsInactive && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-3 mb-4 flex items-center gap-3">
+          <PowerOff size={16} className="text-amber-600 flex-shrink-0" />
+          <p className="text-sm text-amber-800 font-medium flex-1">This batch is currently inactive</p>
+          <button onClick={handleToggleBatchStatus} disabled={toggleLoading}
+            className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition disabled:opacity-50">
+            {toggleLoading ? <Loader2 size={12} className="animate-spin" /> : null} Reactivate
+          </button>
+        </div>
+      )}
+
       {/* Batch info card */}
       <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
               <h1 className="text-2xl font-bold text-slate-800">{batch.name}</h1>
+              {batchIsInactive && (
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-500">Inactive</span>
+              )}
               {batch.mode && (
                 <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${batch.mode === 'online' ? 'bg-brand-blue-light text-brand-blue' : batch.mode === 'hybrid' ? 'bg-primary-light text-primary' : 'bg-slate-100 text-slate-600'}`}>
                   {batch.mode === 'online' ? '💻' : batch.mode === 'hybrid' ? '🔀' : '🏫'} {batch.mode.charAt(0).toUpperCase()+batch.mode.slice(1)}
@@ -698,7 +801,12 @@ export default function BatchDetail() {
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button onClick={handleToggleBatchStatus} disabled={toggleLoading}
+              className={`flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-xl transition disabled:opacity-50 ${batchIsInactive ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700' : 'bg-slate-100 hover:bg-amber-50 text-slate-600 hover:text-amber-700'}`}>
+              {toggleLoading ? <Loader2 size={15} className="animate-spin" /> : <PowerOff size={15} />}
+              {batchIsInactive ? 'Reactivate' : 'Mark Inactive'}
+            </button>
             <button onClick={() => setPlannerOpen(true)}
               className="flex items-center gap-2 bg-[#1B3A6B] hover:bg-[#163058] text-white text-sm font-medium px-4 py-2 rounded-xl transition">
               <Shuffle size={15} /> Smart Planner
@@ -779,7 +887,16 @@ export default function BatchDetail() {
                       <td className="px-6 py-3.5"><AccountStatusBadge status={s.status} /></td>
                       <td className="px-6 py-3.5 text-sm text-slate-500">{s.enrolled_at ? formatDate(s.enrolled_at) : '—'}</td>
                       <td className="px-6 py-3.5 text-right">
-                        <button onClick={(e) => { e.stopPropagation(); handleRemoveStudent(s) }} className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition"><Trash2 size={15} /></button>
+                        <div className="flex items-center justify-end gap-1">
+                          <button onClick={(e) => { e.stopPropagation(); setResetPasswordStudent(s) }}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-primary hover:bg-primary-light transition" title="Reset password">
+                            <KeyRound size={14} />
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); handleRemoveStudent(s) }}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition">
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -914,6 +1031,7 @@ export default function BatchDetail() {
 
       <AddStudentModal open={addModal} onClose={() => setAddModal(false)} onSubmit={handleAddStudent} loading={addLoading} />
       <StudentProfileModal open={!!profileStudent} onClose={() => setProfileStudent(null)} student={profileStudent} batch={batch} />
+      <ResetStudentPasswordModal student={resetPasswordStudent} onClose={() => setResetPasswordStudent(null)} />
 
       {plannerOpen && (
         <SmartPlanner

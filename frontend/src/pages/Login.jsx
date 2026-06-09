@@ -1,17 +1,50 @@
 import React, { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { Eye, EyeOff, Mail, Lock, CheckCircle } from 'lucide-react'
+import { Eye, EyeOff, Mail, Lock, CheckCircle, X, HelpCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '../context/AuthContext.jsx'
 import { analyzeError } from '../utils/errorAnalyzer.js'
 import { ErrorCard } from '../utils/showError.jsx'
+
+function ForgotPasswordModal({ onClose }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-7 relative">
+        <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition">
+          <X size={18} />
+        </button>
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-11 h-11 rounded-xl bg-brand-blue-light flex items-center justify-center flex-shrink-0">
+            <HelpCircle className="w-5 h-5 text-brand-blue" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-slate-800">Forgot Your Password?</h3>
+            <p className="text-xs text-slate-500">We'll help you get back in</p>
+          </div>
+        </div>
+        <div className="bg-slate-50 rounded-xl p-4 text-sm text-slate-600 leading-relaxed space-y-3">
+          <p>Password resets are handled by your trainer or the <span className="font-semibold text-slate-800">Define Digital admin team</span>.</p>
+          <p>Please reach out to them directly and they can reset your password from the admin panel right away.</p>
+          <p className="text-xs text-slate-400">Self-service password reset via email is coming soon.</p>
+        </div>
+        <button
+          onClick={onClose}
+          className="mt-5 w-full bg-primary hover:bg-primary-dark text-white font-semibold py-2.5 rounded-xl text-sm transition shadow-sm shadow-primary/20"
+        >
+          Got it
+        </button>
+      </div>
+    </div>
+  )
+}
 
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [loginError, setLoginError] = useState(null)   // smart analyzed error
+  const [loginError, setLoginError] = useState(null)
+  const [showForgot, setShowForgot] = useState(false)
   const { login } = useAuth()
   const navigate = useNavigate()
 
@@ -193,7 +226,17 @@ export default function Login() {
               </div>
             )}
 
-            <p className="text-center text-sm text-slate-500 mt-5">
+            <div className="mt-4 text-center">
+              <button
+                type="button"
+                onClick={() => setShowForgot(true)}
+                className="text-xs text-slate-400 hover:text-slate-600 transition underline underline-offset-2"
+              >
+                Forgot password?
+              </button>
+            </div>
+
+            <p className="text-center text-sm text-slate-500 mt-4">
               New trainer?{' '}
               <Link to="/trainer-signup" className="text-primary font-semibold hover:text-primary-dark transition">
                 Request Access
@@ -202,6 +245,8 @@ export default function Login() {
           </div>
         </div>
       </div>
+
+      {showForgot && <ForgotPasswordModal onClose={() => setShowForgot(false)} />}
     </div>
   )
 }

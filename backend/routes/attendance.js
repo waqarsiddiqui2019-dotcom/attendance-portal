@@ -1,8 +1,10 @@
 const express = require('express');
+const crypto = require('crypto');
 const ExcelJS = require('exceljs');
 const PDFDocument = require('pdfkit');
 const db = require('../database');
 const { authenticateToken } = require('../middleware/auth');
+const { sendEmail, attendanceConfirmationEmail, uninformedAbsentEmail } = require('../utils/emailService');
 
 const router = express.Router();
 
@@ -93,17 +95,52 @@ router.post('/batch/:batchId', (req, res) => {
     }
 
     const insertOrReplace = db.prepare(`
-      INSERT OR REPLACE INTO attendance (batch_id, student_id, date, status, marked_by)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT OR REPLACE INTO attendance (batch_id, student_id, date, status, marked_by, confirm_token)
+      VALUES (?, ?, ?, ?, ?, ?)
     `);
 
     const markMany = db.transaction((recs) => {
       for (const rec of recs) {
-        insertOrReplace.run(batch.id, rec.student_id, date, rec.status, req.user.id);
+        const token = ['present', 'late'].includes(rec.status) ? crypto.randomUUID() : null;
+        insertOrReplace.run(batch.id, rec.student_id, date, rec.status, req.user.id, token);
       }
     });
 
     markMany(records);
+
+    // Send emails asynchronously — failures never crash the response
+    try {
+      const batchInfo = db.prepare(`
+        SELECT b.*, u.name AS trainer_name FROM batches b
+        JOIN users u ON b.trainer_id = u.id WHERE b.id = ?
+      `).get(batch.id);
+      const topic = db.prepare('SELECT title FROM topics WHERE batch_id = ? AND date = ?').get(batch.id, date);
+      const topicName = topic?.title || 'Class Session';
+
+      for (const rec of records) {
+        const student = db.prepare('SELECT id, name, email FROM users WHERE id = ?').get(rec.student_id);
+        if (!student?.email) continue;
+
+        if (['present', 'late'].includes(rec.status)) {
+          const att = db.prepare('SELECT confirm_token FROM attendance WHERE batch_id = ? AND student_id = ? AND date = ?').get(batch.id, rec.student_id, date);
+          if (att?.confirm_token) {
+            const confirmLink = `${process.env.PORTAL_URL || 'http://localhost:5000'}/api/confirm-attendance/${att.confirm_token}`;
+            const emailHtml = attendanceConfirmationEmail(student.name, date, topicName, null, null, batchInfo.trainer_name, batchInfo.name, confirmLink);
+            sendEmail(student.email, `Attendance Confirmation — ${topicName} — ${date}`, emailHtml).catch(() => {});
+          }
+        } else if (rec.status === 'absent') {
+          const mon = date.slice(0, 7);
+          const { c: uninformedCount } = db.prepare(`
+            SELECT COUNT(*) AS c FROM attendance WHERE student_id = ? AND status = 'absent' AND substr(date,1,7) = ?
+          `).get(rec.student_id, mon);
+          const MAX_UNINFORMED = 3;
+          const emailHtml = uninformedAbsentEmail(student.name, date, topicName, batchInfo.trainer_name, batchInfo.name, uninformedCount, MAX_UNINFORMED, uninformedCount >= MAX_UNINFORMED);
+          sendEmail(student.email, `Attendance Alert — Uninformed Absence — ${date}`, emailHtml).catch(() => {});
+        }
+      }
+    } catch (emailErr) {
+      console.error('[Email] Attendance email error (non-fatal):', emailErr.message);
+    }
 
     return res.json({ message: 'Attendance marked successfully', date, count: records.length });
   } catch (err) {

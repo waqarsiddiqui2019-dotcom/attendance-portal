@@ -131,6 +131,23 @@ router.get('/:id', (req, res) => {
   }
 });
 
+// PATCH /api/batches/:id/toggle-status
+router.patch('/:id/toggle-status', (req, res) => {
+  try {
+    if (!TRAINER_ROLES.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    const batch = getBatch(req.params.id, req.user);
+    if (!batch) return res.status(404).json({ error: 'Batch not found' });
+    const newStatus = (batch.status || 'active') === 'active' ? 'inactive' : 'active';
+    db.prepare('UPDATE batches SET status=? WHERE id=?').run(newStatus, batch.id);
+    return res.json({ status: newStatus });
+  } catch (err) {
+    console.error('Toggle batch status error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // PUT /api/batches/:id
 router.put('/:id', (req, res) => {
   try {

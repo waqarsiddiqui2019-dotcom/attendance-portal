@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../database');
 const { authenticateToken } = require('../middleware/auth');
+const { sendEmail, passwordResetEmail } = require('../utils/emailService');
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -115,6 +116,47 @@ router.post('/batch/:batchId', (req, res) => {
     if (err.message?.includes('UNIQUE constraint failed')) {
       return res.status(409).json({ error: 'Student is already enrolled in this batch' });
     }
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PATCH /api/students/:studentId/reset-password — trainer (own students) or owner role
+router.patch('/:studentId/reset-password', (req, res) => {
+  try {
+    if (!TRAINER_ROLES.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    const { newPassword } = req.body;
+    if (!newPassword || newPassword.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
+    let student;
+    if (['owner', 'co_owner', 'admin'].includes(req.user.role)) {
+      student = db.prepare("SELECT id, name FROM users WHERE id=? AND role='student'").get(req.params.studentId);
+    } else {
+      student = db.prepare(`
+        SELECT DISTINCT u.id, u.name FROM users u
+        JOIN batch_students bs ON bs.student_id = u.id
+        JOIN batches b ON b.id = bs.batch_id
+        WHERE u.id=? AND u.role='student' AND b.trainer_id=?
+      `).get(req.params.studentId, req.user.id);
+    }
+    if (!student) return res.status(404).json({ error: 'Student not found' });
+    const hashed = bcrypt.hashSync(newPassword, 10);
+    db.prepare("UPDATE users SET password=? WHERE id=?").run(hashed, student.id);
+
+    // Email student their new password
+    try {
+      const fullStudent = db.prepare('SELECT email FROM users WHERE id=?').get(student.id);
+      if (fullStudent?.email) {
+        const loginLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`;
+        sendEmail(fullStudent.email, 'Your Password Has Been Reset — Define Digital', passwordResetEmail(student.name, newPassword, loginLink)).catch(() => {});
+      }
+    } catch (e) { console.error('[Email] student password reset email error (non-fatal):', e.message); }
+
+    return res.json({ message: `Password reset for ${student.name}` });
+  } catch (err) {
+    console.error('Reset student password error:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
