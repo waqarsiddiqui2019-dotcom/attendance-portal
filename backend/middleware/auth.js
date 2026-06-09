@@ -26,15 +26,15 @@ function authenticateToken(req, res, next) {
 
 function requireOwner(req, res, next) {
   if (!['owner', 'co_owner', 'admin'].includes(req.user?.role)) {
-    return res.status(403).json({ error: 'Owner access required' });
+    return res.status(403).json({ error: 'You do not have permission to perform this action. Please contact the portal owner.' });
   }
   next();
 }
 
-// Only the root owner account can do destructive/sensitive staff operations
+// Only the root owner account can do destructive/sensitive operations
 function requireRootOwner(req, res, next) {
   if (req.user?.role !== 'owner') {
-    return res.status(403).json({ error: 'Root owner access required' });
+    return res.status(403).json({ error: 'This action requires root owner privileges. Please contact the portal owner.' });
   }
   next();
 }

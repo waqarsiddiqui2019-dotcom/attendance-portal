@@ -537,7 +537,7 @@ router.get('/leaves', (req, res) => {
 // ── Staff Management (root owner only) ───────────────────────────────────────
 
 // GET /api/owner/staff
-router.get('/staff', requireRootOwner, (req, res) => {
+router.get('/staff', requireOwner, (req, res) => {
   try {
     const staff = db.prepare(`
       SELECT u.id, u.name, u.email, u.role, u.status, u.created_at,
@@ -557,7 +557,7 @@ router.get('/staff', requireRootOwner, (req, res) => {
 })
 
 // POST /api/owner/staff  — create co-owner or admin
-router.post('/staff', requireRootOwner, (req, res) => {
+router.post('/staff', requireOwner, (req, res) => {
   try {
     const { name, email, password, role, permissions = {} } = req.body
     if (!name?.trim() || !email?.trim() || !password || !['co_owner','admin'].includes(role)) {
@@ -602,7 +602,7 @@ router.post('/staff', requireRootOwner, (req, res) => {
 })
 
 // PUT /api/owner/staff/:id/permissions
-router.put('/staff/:id/permissions', requireRootOwner, (req, res) => {
+router.put('/staff/:id/permissions', requireOwner, (req, res) => {
   try {
     const { id } = req.params
     const u = db.prepare("SELECT id FROM users WHERE id=? AND role IN ('co_owner','admin')").get(id)
@@ -641,7 +641,7 @@ router.put('/staff/:id/permissions', requireRootOwner, (req, res) => {
 })
 
 // DELETE /api/owner/staff/:id
-router.delete('/staff/:id', requireRootOwner, (req, res) => {
+router.delete('/staff/:id', requireOwner, (req, res) => {
   try {
     const u = db.prepare("SELECT id FROM users WHERE id=? AND role IN ('co_owner','admin')").get(req.params.id)
     if (!u) return res.status(404).json({ error: 'Staff member not found' })

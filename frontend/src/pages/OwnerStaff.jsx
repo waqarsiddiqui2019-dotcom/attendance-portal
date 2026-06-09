@@ -68,7 +68,7 @@ export default function OwnerStaff() {
     name: '', email: '', password: '', role: 'co_owner', permissions: { ...DEFAULT_PERMS },
   })
 
-  const isRootOwner = user?.role === 'owner'
+  const isOwnerRole = ['owner','co_owner','admin'].includes(user?.role)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -121,11 +121,11 @@ export default function OwnerStaff() {
     }
   }
 
-  if (!isRootOwner) {
+  if (!isOwnerRole) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-slate-400">
         <Shield size={36} className="mb-3 text-slate-300" />
-        <p className="text-sm">Only the root owner can manage staff roles</p>
+        <p className="text-sm">You do not have permission to manage staff roles</p>
       </div>
     )
   }

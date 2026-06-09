@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { ClipboardList, Plus, X, ChevronRight, ChevronLeft, CheckCircle, Search, Eye, Upload, Trash2, User, BookOpen, Phone, MapPin, GraduationCap, FileText, AlertCircle } from 'lucide-react'
+import { ClipboardList, Plus, X, ChevronRight, ChevronLeft, CheckCircle, Search, Eye, Upload, User, BookOpen, Phone, MapPin, GraduationCap, FileText, AlertCircle, RefreshCw } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { getAdmissions, createAdmission, getBatches, getOwnerTrainers, getTopicSets } from '../api/index.js'
+import { getAdmissions, createAdmission, getBatches, getOwnerTrainers, getTopicSets, reassignStudent, getActiveBatchesWithTrainers } from '../api/index.js'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -135,21 +135,133 @@ function DetailModal({ admission, onClose }) {
   )
 }
 
+// ── Allocate / Reassign Batch Modal ──────────────────────────────────────────
+
+function AllocateBatchModal({ student, onClose, onSuccess }) {
+  const [batches, setBatches]  = useState([])
+  const [form,    setForm]     = useState({
+    new_batch_id: '', new_trainer_id: '', reason: '',
+    effective_date: new Date().toISOString().slice(0,10), keep_attendance: true,
+  })
+  const [loading, setLoading] = useState(false)
+  const isReassign = !!student.batch_id
+
+  useEffect(() => {
+    getActiveBatchesWithTrainers().then(r => setBatches(r.data.batches || [])).catch(() => {})
+  }, [])
+
+  const selectedBatch = batches.find(b => String(b.id) === String(form.new_batch_id))
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  useEffect(() => {
+    if (selectedBatch) set('new_trainer_id', String(selectedBatch.trainer_id))
+  }, [form.new_batch_id])
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!form.new_batch_id) { toast.error('Please select a batch'); return }
+    if (isReassign && !form.reason.trim()) { toast.error('Please enter a reason for reassignment'); return }
+    setLoading(true)
+    try {
+      await reassignStudent(student.id, {
+        new_batch_id:    Number(form.new_batch_id),
+        new_trainer_id:  form.new_trainer_id ? Number(form.new_trainer_id) : null,
+        reason:          form.reason.trim() || 'Initial batch allocation from admissions',
+        effective_date:  form.effective_date,
+        keep_attendance: form.keep_attendance,
+      })
+      toast.success(`${student.name} ${isReassign ? 'reassigned' : 'allocated'} successfully`)
+      onSuccess()
+      onClose()
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to allocate batch')
+    } finally { setLoading(false) }
+  }
+
+  const uniqueTrainers = [...new Map(batches.filter(b => b.trainer_id).map(b => [b.trainer_id, b.trainer_name])).entries()]
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 relative">
+        <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={18} /></button>
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{background:'#E8F2FC'}}>
+            <RefreshCw className="w-5 h-5" style={{color:'#2272B9'}} />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-slate-800">{isReassign ? 'Change Batch' : 'Assign to Batch'}</h3>
+            <p className="text-xs text-slate-500">
+              {student.name}
+              {isReassign ? <> · Currently in <strong>{student.batch_name}</strong></> : ' · Not yet assigned to a batch'}
+            </p>
+          </div>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <label className="text-xs font-semibold text-slate-600 mb-1 block">Select Batch *</label>
+            <select value={form.new_batch_id} onChange={e => set('new_batch_id', e.target.value)}
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white">
+              <option value="">Choose a batch…</option>
+              {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-600 mb-1 block">Trainer</label>
+            <select value={form.new_trainer_id} onChange={e => set('new_trainer_id', e.target.value)}
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white">
+              <option value="">Auto (from batch)</option>
+              {uniqueTrainers.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+            </select>
+          </div>
+          {isReassign && (
+            <div>
+              <label className="text-xs font-semibold text-slate-600 mb-1 block">Reason for Change *</label>
+              <textarea value={form.reason} onChange={e => set('reason', e.target.value)} rows={2}
+                placeholder="Why is the student being moved?"
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary resize-none" />
+            </div>
+          )}
+          <div>
+            <label className="text-xs font-semibold text-slate-600 mb-1 block">Effective Date</label>
+            <input type="date" value={form.effective_date} onChange={e => set('effective_date', e.target.value)}
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" />
+          </div>
+          {isReassign && (
+            <label className="flex items-center gap-2 cursor-pointer pt-1">
+              <input type="checkbox" checked={form.keep_attendance} onChange={e => set('keep_attendance', e.target.checked)} className="rounded" />
+              <span className="text-sm text-slate-700">Keep existing attendance records</span>
+            </label>
+          )}
+          <button type="submit" disabled={loading}
+            className="w-full bg-primary hover:bg-primary-dark text-white font-semibold py-2.5 rounded-xl text-sm disabled:opacity-60 transition mt-1">
+            {loading ? 'Saving…' : isReassign ? 'Confirm Reassignment' : 'Assign to Batch'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // ── Admissions List ───────────────────────────────────────────────────────────
 
 function AdmissionsList() {
-  const [admissions, setAdmissions] = useState([])
-  const [loading,    setLoading]    = useState(true)
-  const [search,     setSearch]     = useState('')
-  const [batchFilter, setBatchFilter] = useState('')
-  const [detail,     setDetail]     = useState(null)
+  const [admissions,      setAdmissions]      = useState([])
+  const [loading,         setLoading]         = useState(true)
+  const [search,          setSearch]          = useState('')
+  const [batchFilter,     setBatchFilter]      = useState('')
+  const [detail,          setDetail]          = useState(null)
+  const [allocateStudent, setAllocateStudent] = useState(null)
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoading(true)
     getAdmissions()
       .then(r => setAdmissions(r.data.admissions || []))
       .catch(() => toast.error('Failed to load admissions'))
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => { load() }, [load])
 
   const batches = [...new Map(admissions.filter(a => a.batch_id).map(a => [a.batch_id, a.batch_name])).entries()]
 
@@ -189,7 +301,7 @@ function AdmissionsList() {
               {['Student','Email','Batch','Trainer','Mode','Admitted','Status'].map(h => (
                 <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
               ))}
-              <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Details</th>
+              <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
@@ -212,9 +324,18 @@ function AdmissionsList() {
                   <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${a.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{a.status}</span>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <button onClick={() => setDetail(a)} className="p-1.5 rounded-lg text-slate-400 hover:text-brand-blue hover:bg-brand-blue-light transition">
-                    <Eye size={14} />
-                  </button>
+                  <div className="flex items-center justify-end gap-1">
+                    <button
+                      onClick={() => setAllocateStudent(a)}
+                      title={a.batch_id ? 'Change Batch' : 'Assign to Batch'}
+                      className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition ${a.batch_id ? 'text-[#2272B9] bg-blue-50 hover:bg-blue-100' : 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'}`}>
+                      <RefreshCw size={12} />
+                      {a.batch_id ? 'Reassign' : 'Assign'}
+                    </button>
+                    <button onClick={() => setDetail(a)} className="p-1.5 rounded-lg text-slate-400 hover:text-brand-blue hover:bg-brand-blue-light transition">
+                      <Eye size={14} />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -222,6 +343,13 @@ function AdmissionsList() {
         </table>
       )}
       {detail && <DetailModal admission={detail} onClose={() => setDetail(null)} />}
+      {allocateStudent && (
+        <AllocateBatchModal
+          student={allocateStudent}
+          onClose={() => setAllocateStudent(null)}
+          onSuccess={load}
+        />
+      )}
     </div>
   )
 }
