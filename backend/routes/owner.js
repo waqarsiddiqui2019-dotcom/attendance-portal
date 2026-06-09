@@ -542,7 +542,9 @@ router.get('/staff', requireRootOwner, (req, res) => {
     const staff = db.prepare(`
       SELECT u.id, u.name, u.email, u.role, u.status, u.created_at,
              sp.can_manage_trainers, sp.can_manage_students, sp.can_manage_batches,
-             sp.can_view_reports, sp.can_approve_leaves, sp.can_message_all
+             sp.can_view_reports, sp.can_approve_leaves, sp.can_message_all,
+             sp.can_admit_students, sp.can_reassign_students, sp.can_send_announcements,
+             sp.can_view_financials, sp.can_manage_daily_log
       FROM users u
       LEFT JOIN staff_permissions sp ON sp.user_id = u.id
       WHERE u.role IN ('co_owner','admin')
@@ -573,8 +575,9 @@ router.post('/staff', requireRootOwner, (req, res) => {
 
     const uid = result.lastInsertRowid
     db.prepare(`
-      INSERT INTO staff_permissions (user_id, can_manage_trainers, can_manage_students, can_manage_batches, can_view_reports, can_approve_leaves, can_message_all)
-      VALUES (?,?,?,?,?,?,?)
+      INSERT INTO staff_permissions (user_id, can_manage_trainers, can_manage_students, can_manage_batches, can_view_reports, can_approve_leaves, can_message_all,
+        can_admit_students, can_reassign_students, can_send_announcements, can_view_financials, can_manage_daily_log)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
     `).run(
       uid,
       permissions.can_manage_trainers   ? 1 : 0,
@@ -583,6 +586,11 @@ router.post('/staff', requireRootOwner, (req, res) => {
       permissions.can_view_reports      !== false ? 1 : 0,
       permissions.can_approve_leaves    ? 1 : 0,
       permissions.can_message_all       !== false ? 1 : 0,
+      permissions.can_admit_students    ? 1 : 0,
+      permissions.can_reassign_students ? 1 : 0,
+      permissions.can_send_announcements? 1 : 0,
+      permissions.can_view_financials   ? 1 : 0,
+      permissions.can_manage_daily_log  ? 1 : 0,
     )
 
     const user = db.prepare('SELECT id, name, email, role, created_at FROM users WHERE id=?').get(uid)
@@ -600,21 +608,31 @@ router.put('/staff/:id/permissions', requireRootOwner, (req, res) => {
     const u = db.prepare("SELECT id FROM users WHERE id=? AND role IN ('co_owner','admin')").get(id)
     if (!u) return res.status(404).json({ error: 'Staff member not found' })
 
-    const { can_manage_trainers, can_manage_students, can_manage_batches, can_view_reports, can_approve_leaves, can_message_all } = req.body
+    const { can_manage_trainers, can_manage_students, can_manage_batches, can_view_reports, can_approve_leaves, can_message_all,
+            can_admit_students, can_reassign_students, can_send_announcements, can_view_financials, can_manage_daily_log } = req.body
     db.prepare(`
-      INSERT INTO staff_permissions (user_id, can_manage_trainers, can_manage_students, can_manage_batches, can_view_reports, can_approve_leaves, can_message_all)
-      VALUES (?,?,?,?,?,?,?)
+      INSERT INTO staff_permissions (user_id, can_manage_trainers, can_manage_students, can_manage_batches, can_view_reports, can_approve_leaves, can_message_all,
+        can_admit_students, can_reassign_students, can_send_announcements, can_view_financials, can_manage_daily_log)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(user_id) DO UPDATE SET
         can_manage_trainers=excluded.can_manage_trainers,
         can_manage_students=excluded.can_manage_students,
         can_manage_batches=excluded.can_manage_batches,
         can_view_reports=excluded.can_view_reports,
         can_approve_leaves=excluded.can_approve_leaves,
-        can_message_all=excluded.can_message_all
+        can_message_all=excluded.can_message_all,
+        can_admit_students=excluded.can_admit_students,
+        can_reassign_students=excluded.can_reassign_students,
+        can_send_announcements=excluded.can_send_announcements,
+        can_view_financials=excluded.can_view_financials,
+        can_manage_daily_log=excluded.can_manage_daily_log
     `).run(id,
-      can_manage_trainers ? 1 : 0, can_manage_students ? 1 : 0,
-      can_manage_batches  ? 1 : 0, can_view_reports    ? 1 : 0,
-      can_approve_leaves  ? 1 : 0, can_message_all     ? 1 : 0,
+      can_manage_trainers  ? 1 : 0, can_manage_students   ? 1 : 0,
+      can_manage_batches   ? 1 : 0, can_view_reports       ? 1 : 0,
+      can_approve_leaves   ? 1 : 0, can_message_all        ? 1 : 0,
+      can_admit_students   ? 1 : 0, can_reassign_students  ? 1 : 0,
+      can_send_announcements?1 : 0, can_view_financials    ? 1 : 0,
+      can_manage_daily_log ? 1 : 0,
     )
     return res.json({ message: 'Permissions updated' })
   } catch (err) {
@@ -809,5 +827,87 @@ router.get('/student/:id/attendance-summary', (req, res) => {
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+// POST /api/owner/students/:id/reassign
+router.post('/students/:id/reassign', requireOwner, (req, res) => {
+  try {
+    const studentId = Number(req.params.id)
+    const { new_batch_id, new_trainer_id, reason, effective_date, keep_attendance = 1 } = req.body
+    if (!new_batch_id || !reason?.trim() || !effective_date) {
+      return res.status(400).json({ error: 'new_batch_id, reason, and effective_date are required' })
+    }
+
+    // Check permissions for non-owner roles
+    if (!['owner','co_owner'].includes(req.user.role)) {
+      const sp = db.prepare('SELECT can_reassign_students FROM staff_permissions WHERE user_id=?').get(req.user.id)
+      if (!sp?.can_reassign_students) return res.status(403).json({ error: 'Permission denied: can_reassign_students required' })
+    }
+
+    const student = db.prepare("SELECT id, name, email FROM users WHERE id=? AND role='student'").get(studentId)
+    if (!student) return res.status(404).json({ error: 'Student not found' })
+
+    const newBatch = db.prepare('SELECT id, name, trainer_id FROM batches WHERE id=? AND status=?').get(new_batch_id, 'active')
+    if (!newBatch) return res.status(404).json({ error: 'Batch not found or inactive' })
+
+    const resolvedTrainerId = new_trainer_id || newBatch.trainer_id
+
+    // Get old batch info
+    const oldEnrollment = db.prepare('SELECT batch_id FROM batch_students WHERE student_id=? ORDER BY enrolled_at DESC LIMIT 1').get(studentId)
+    const oldBatchId = oldEnrollment?.batch_id || null
+    let oldTrainerId = null
+    if (oldBatchId) {
+      const oldBatch = db.prepare('SELECT trainer_id FROM batches WHERE id=?').get(oldBatchId)
+      oldTrainerId = oldBatch?.trainer_id || null
+    }
+
+    // Remove from old batch; enroll in new batch
+    if (oldBatchId) db.prepare('DELETE FROM batch_students WHERE student_id=? AND batch_id=?').run(studentId, oldBatchId)
+    db.prepare('INSERT OR IGNORE INTO batch_students (batch_id, student_id) VALUES (?,?)').run(new_batch_id, studentId)
+
+    // Log the reassignment
+    db.prepare(`INSERT INTO student_reassignments (student_id, old_batch_id, new_batch_id, old_trainer_id, new_trainer_id, reason, effective_date, keep_attendance, reassigned_by)
+      VALUES (?,?,?,?,?,?,?,?,?)`).run(studentId, oldBatchId, new_batch_id, oldTrainerId, resolvedTrainerId, reason.trim(), effective_date, keep_attendance ? 1 : 0, req.user.id)
+
+    const newTrainer = db.prepare('SELECT name FROM users WHERE id=?').get(resolvedTrainerId)
+    const oldBatchName = oldBatchId ? db.prepare('SELECT name FROM batches WHERE id=?').get(oldBatchId)?.name : null
+
+    // Notifications
+    const insertNotif = db.prepare(`INSERT INTO notifications (user_id, title, message, type) VALUES (?,?,?,?)`)
+    insertNotif.run(studentId, 'Batch Updated', `Your batch has been updated to "${newBatch.name}". Your trainer is now ${newTrainer?.name || 'assigned'}.`, 'info')
+    if (resolvedTrainerId) insertNotif.run(resolvedTrainerId, 'New Student Assigned', `Student ${student.name} has been assigned to your batch "${newBatch.name}".`, 'info')
+    if (oldTrainerId && oldTrainerId !== resolvedTrainerId) insertNotif.run(oldTrainerId, 'Student Moved', `Student ${student.name} has been moved to "${newBatch.name}".`, 'info')
+
+    // Emails (fire-and-forget)
+    try {
+      const { sendEmail } = require('../utils/emailService')
+      const body = (title, msg) => `<div style="font-family:sans-serif;max-width:600px;margin:auto;padding:24px;"><h2 style="color:#1B3A6B;">${title}</h2><p>${msg}</p><p style="color:#888;font-size:12px;">— Define Digital Portal</p></div>`
+      sendEmail(student.email, 'Your Batch Has Been Updated', body('Batch Updated', `Hello ${student.name},<br><br>Your batch has been updated to <strong>${newBatch.name}</strong>. Your trainer is now <strong>${newTrainer?.name || 'TBD'}</strong>.<br><br>Please log in to your portal to view your updated schedule.`)).catch(() => {})
+      if (resolvedTrainerId && newTrainer) {
+        const trainerRow = db.prepare('SELECT email FROM users WHERE id=?').get(resolvedTrainerId)
+        if (trainerRow?.email) sendEmail(trainerRow.email, 'New Student Assigned to Your Batch', body('New Student Assigned', `Hello,<br><br>Student <strong>${student.name}</strong> has been assigned to your batch <strong>${newBatch.name}</strong>.`)).catch(() => {})
+      }
+      if (oldTrainerId && oldTrainerId !== resolvedTrainerId) {
+        const oldTrainerRow = db.prepare('SELECT email, name FROM users WHERE id=?').get(oldTrainerId)
+        if (oldTrainerRow?.email) sendEmail(oldTrainerRow.email, 'Student Moved to Another Batch', body('Student Moved', `Hello ${oldTrainerRow.name},<br><br>Student <strong>${student.name}</strong> has been moved from your batch to <strong>${newBatch.name}</strong>.`)).catch(() => {})
+      }
+    } catch {}
+
+    return res.json({ message: 'Student reassigned successfully', new_batch_id, new_trainer_id: resolvedTrainerId })
+  } catch (err) {
+    console.error(err); return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// GET /api/owner/active-batches-with-trainers  (for reassign modal)
+router.get('/active-batches-with-trainers', requireOwner, (req, res) => {
+  try {
+    const batches = db.prepare(`
+      SELECT b.id, b.name, b.mode, u.id AS trainer_id, u.name AS trainer_name
+      FROM batches b JOIN users u ON u.id=b.trainer_id
+      WHERE b.status='active' ORDER BY b.name ASC
+    `).all()
+    return res.json({ batches })
+  } catch (err) { return res.status(500).json({ error: 'Internal server error' }) }
+})
 
 module.exports = router;

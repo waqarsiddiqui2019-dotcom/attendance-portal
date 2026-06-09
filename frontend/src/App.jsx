@@ -27,6 +27,8 @@ import OwnerLeaveLog          from './pages/OwnerLeaveLog.jsx'
 import Messages               from './pages/Messages.jsx'
 import OwnerStaff             from './pages/OwnerStaff.jsx'
 import OwnerStudents          from './pages/OwnerStudents.jsx'
+import OwnerAdmissions        from './pages/OwnerAdmissions.jsx'
+import OwnerDailyLog          from './pages/OwnerDailyLog.jsx'
 import ResetPassword          from './pages/ResetPassword.jsx'
 
 export default function App() {
@@ -53,6 +55,8 @@ export default function App() {
           <Route path="messages"                     element={<Messages />} />
           <Route path="staff"                        element={<OwnerStaff />} />
           <Route path="students"                     element={<OwnerStudents />} />
+          <Route path="admissions"                   element={<OwnerAdmissions />} />
+          <Route path="daily-log"                    element={<OwnerDailyLog />} />
         </Route>
 
         {/* Trainer routes */}

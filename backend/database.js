@@ -119,6 +119,24 @@ if (!batchCols.includes('status')) {
   console.log('[DB] Added status column to batches');
 }
 
+// ── Migrate: add new permission columns to staff_permissions ─────────────
+{
+  const spCols = db.prepare('PRAGMA table_info(staff_permissions)').all().map(c => c.name)
+  const newPerms = [
+    ['can_admit_students',    'INTEGER NOT NULL DEFAULT 0'],
+    ['can_reassign_students', 'INTEGER NOT NULL DEFAULT 0'],
+    ['can_send_announcements','INTEGER NOT NULL DEFAULT 0'],
+    ['can_view_financials',   'INTEGER NOT NULL DEFAULT 0'],
+    ['can_manage_daily_log',  'INTEGER NOT NULL DEFAULT 0'],
+  ]
+  for (const [col, def] of newPerms) {
+    if (!spCols.includes(col)) {
+      db.exec(`ALTER TABLE staff_permissions ADD COLUMN ${col} ${def}`)
+      console.log(`[DB] Added ${col} to staff_permissions`)
+    }
+  }
+}
+
 // ── Migrate: add confirmation tracking to attendance ─────────────────────
 {
   const attCols = db.prepare('PRAGMA table_info(attendance)').all().map(c => c.name)
@@ -322,16 +340,99 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS staff_permissions (
-    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id               INTEGER NOT NULL UNIQUE,
-    can_manage_trainers   INTEGER NOT NULL DEFAULT 0,
-    can_manage_students   INTEGER NOT NULL DEFAULT 0,
-    can_manage_batches    INTEGER NOT NULL DEFAULT 0,
-    can_view_reports      INTEGER NOT NULL DEFAULT 1,
-    can_approve_leaves    INTEGER NOT NULL DEFAULT 0,
-    can_message_all       INTEGER NOT NULL DEFAULT 1,
-    created_at            DATETIME DEFAULT CURRENT_TIMESTAMP,
+    id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id                  INTEGER NOT NULL UNIQUE,
+    can_manage_trainers      INTEGER NOT NULL DEFAULT 0,
+    can_manage_students      INTEGER NOT NULL DEFAULT 0,
+    can_manage_batches       INTEGER NOT NULL DEFAULT 0,
+    can_view_reports         INTEGER NOT NULL DEFAULT 1,
+    can_approve_leaves       INTEGER NOT NULL DEFAULT 0,
+    can_message_all          INTEGER NOT NULL DEFAULT 1,
+    can_admit_students       INTEGER NOT NULL DEFAULT 0,
+    can_reassign_students    INTEGER NOT NULL DEFAULT 0,
+    can_send_announcements   INTEGER NOT NULL DEFAULT 0,
+    can_view_financials      INTEGER NOT NULL DEFAULT 0,
+    can_manage_daily_log     INTEGER NOT NULL DEFAULT 0,
+    created_at               DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS student_admissions (
+    id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id                     INTEGER NOT NULL UNIQUE,
+    batch_id                    INTEGER,
+    admitted_by                 INTEGER,
+    phone                       TEXT,
+    whatsapp                    TEXT,
+    dob                         TEXT,
+    gender                      TEXT,
+    profile_photo               TEXT,
+    city                        TEXT,
+    state                       TEXT,
+    pin_code                    TEXT,
+    highest_qualification       TEXT,
+    field_of_study              TEXT,
+    college_name                TEXT,
+    year_of_passing             TEXT,
+    preferred_mode              TEXT DEFAULT 'no_preference',
+    emergency_contact_name      TEXT,
+    emergency_contact_relation  TEXT,
+    emergency_contact_phone     TEXT,
+    heard_about_us              TEXT,
+    prior_knowledge             TEXT DEFAULT 'none',
+    special_requirements        TEXT,
+    id_proof_name               TEXT,
+    id_proof_data               TEXT,
+    edu_cert_name               TEXT,
+    edu_cert_data               TEXT,
+    other_doc_name              TEXT,
+    other_doc_data              TEXT,
+    created_at                  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id)     REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (batch_id)    REFERENCES batches(id),
+    FOREIGN KEY (admitted_by) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS student_reassignments (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id      INTEGER NOT NULL,
+    old_batch_id    INTEGER,
+    new_batch_id    INTEGER NOT NULL,
+    old_trainer_id  INTEGER,
+    new_trainer_id  INTEGER,
+    reason          TEXT NOT NULL,
+    effective_date  TEXT NOT NULL,
+    keep_attendance INTEGER DEFAULT 1,
+    reassigned_by   INTEGER NOT NULL,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (student_id)    REFERENCES users(id),
+    FOREIGN KEY (reassigned_by) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS daily_log (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    logged_by        INTEGER NOT NULL,
+    log_date         TEXT NOT NULL,
+    log_time         TEXT NOT NULL,
+    category         TEXT NOT NULL DEFAULT 'other',
+    person_name      TEXT,
+    student_id       INTEGER,
+    description      TEXT NOT NULL,
+    outcome          TEXT NOT NULL DEFAULT 'informational',
+    followup_required INTEGER NOT NULL DEFAULT 0,
+    followup_date    TEXT,
+    followup_note    TEXT,
+    followup_done    INTEGER NOT NULL DEFAULT 0,
+    priority         TEXT NOT NULL DEFAULT 'medium',
+    created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (logged_by)   REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (student_id)  REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS settings (
+    key        TEXT PRIMARY KEY,
+    value      TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
   CREATE TABLE IF NOT EXISTS password_reset_tokens (

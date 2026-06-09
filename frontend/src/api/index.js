@@ -182,6 +182,29 @@ export const getOwnerStudentsManagement = ()   => api.get('/owner/students-manag
 export const getStudentLeavesHistory    = (id) => api.get(`/owner/student/${id}/leaves-history`)
 export const getStudentAttendanceSummary= (id) => api.get(`/owner/student/${id}/attendance-summary`)
 
+// ── Admissions ────────────────────────────────────────────────────────────────
+export const getAdmissions       = ()   => api.get('/admissions')
+export const getAdmission        = (id) => api.get(`/admissions/${id}`)
+export const createAdmission     = (data) => api.post('/admissions', data)
+
+// ── Daily Log ─────────────────────────────────────────────────────────────────
+export const getDailyLog         = (date)  => api.get(`/daily-log?date=${date}`)
+export const getDailyLogDots     = (month) => api.get(`/daily-log/calendar-dots?month=${month}`)
+export const getPendingFollowups = ()      => api.get('/daily-log/pending-followups')
+export const createLogEntry      = (data)  => api.post('/daily-log', data)
+export const updateLogEntry      = (id, data) => api.put(`/daily-log/${id}`, data)
+export const deleteLogEntry      = (id)    => api.delete(`/daily-log/${id}`)
+export const markFollowupDone    = (id)    => api.patch(`/daily-log/${id}/followup-done`)
+export const sendDailyReport     = (date)  => api.post('/daily-log/send-report', { date })
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+export const getSettings         = ()      => api.get('/settings')
+export const saveSettings        = (data)  => api.put('/settings', data)
+
+// ── Reassignment ──────────────────────────────────────────────────────────────
+export const reassignStudent     = (id, data) => api.post(`/owner/students/${id}/reassign`, data)
+export const getActiveBatchesWithTrainers = () => api.get('/owner/active-batches-with-trainers')
+
 // ── Owner Staff ───────────────────────────────────────────────────────────────
 export const getOwnerStaff            = ()            => api.get('/owner/staff')
 export const createStaff              = (data)        => api.post('/owner/staff', data)

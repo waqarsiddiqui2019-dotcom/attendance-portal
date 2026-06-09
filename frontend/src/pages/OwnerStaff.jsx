@@ -5,13 +5,23 @@ import { getOwnerStaff, createStaff, updateStaffPermissions, deleteStaff } from 
 import { useAuth } from '../context/AuthContext.jsx'
 
 const PERM_LABELS = {
-  can_manage_trainers: 'Manage Trainers (approve/reject/delete)',
-  can_manage_students: 'Manage Students',
-  can_manage_batches:  'Manage Batches',
-  can_view_reports:    'View Reports & Calendars',
-  can_approve_leaves:  'Approve Emergency Leaves',
-  can_message_all:     'Message Anyone',
+  can_manage_trainers:    'Manage Trainers (approve/reject/delete)',
+  can_manage_students:    'Manage Students',
+  can_manage_batches:     'Manage Batches',
+  can_view_reports:       'View Reports & Calendars',
+  can_approve_leaves:     'Approve Emergency Leaves',
+  can_message_all:        'Message Anyone',
+  can_admit_students:     'Admit Students (access admission form)',
+  can_reassign_students:  'Reassign Students (change batch or trainer)',
+  can_send_announcements: 'Send Announcements to all users',
+  can_view_financials:    'View Financials (fee management)',
+  can_manage_daily_log:   'Manage Daily Activity Log',
 }
+
+const PERM_GROUPS = [
+  { label: 'Core Access', keys: ['can_manage_trainers','can_manage_students','can_manage_batches','can_view_reports','can_approve_leaves','can_message_all'] },
+  { label: 'Extended Access', keys: ['can_admit_students','can_reassign_students','can_send_announcements','can_view_financials','can_manage_daily_log'] },
+]
 
 const ROLE_CONFIG = {
   co_owner: { label: 'Co-Owner', color: 'bg-purple-100 text-purple-700', desc: 'Full access with selected permissions' },
@@ -19,12 +29,17 @@ const ROLE_CONFIG = {
 }
 
 const DEFAULT_PERMS = {
-  can_manage_trainers: false,
-  can_manage_students: false,
-  can_manage_batches:  false,
-  can_view_reports:    true,
-  can_approve_leaves:  false,
-  can_message_all:     true,
+  can_manage_trainers:    false,
+  can_manage_students:    false,
+  can_manage_batches:     false,
+  can_view_reports:       true,
+  can_approve_leaves:     false,
+  can_message_all:        true,
+  can_admit_students:     false,
+  can_reassign_students:  false,
+  can_send_announcements: false,
+  can_view_financials:    false,
+  can_manage_daily_log:   false,
 }
 
 function PermToggle({ label, checked, onChange, disabled }) {
@@ -175,11 +190,18 @@ export default function OwnerStaff() {
 
           <div>
             <p className="text-xs font-semibold text-slate-600 mb-2 uppercase tracking-wider">Permissions</p>
-            <div className="grid grid-cols-1 gap-2">
-              {Object.entries(PERM_LABELS).map(([key, label]) => (
-                <PermToggle key={key} label={label}
-                  checked={form.permissions[key] || false}
-                  onChange={() => setForm(p => ({ ...p, permissions: { ...p.permissions, [key]: !p.permissions[key] } }))} />
+            <div className="space-y-4">
+              {PERM_GROUPS.map(group => (
+                <div key={group.label}>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">{group.label}</p>
+                  <div className="grid grid-cols-1 gap-1.5">
+                    {group.keys.map(key => (
+                      <PermToggle key={key} label={PERM_LABELS[key]}
+                        checked={form.permissions[key] || false}
+                        onChange={() => setForm(p => ({ ...p, permissions: { ...p.permissions, [key]: !p.permissions[key] } }))} />
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </div>
@@ -247,12 +269,19 @@ export default function OwnerStaff() {
                     ))}
                   </div>
                 ) : (
-                  <div className="space-y-2 mt-3">
+                  <div className="space-y-4 mt-3">
                     <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Edit Permissions</p>
-                    {Object.entries(PERM_LABELS).map(([key, label]) => (
-                      <PermToggle key={key} label={label}
-                        checked={editPerms[key] || false}
-                        onChange={() => setEditPerms(p => ({ ...p, [key]: !p[key] }))} />
+                    {PERM_GROUPS.map(group => (
+                      <div key={group.label}>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">{group.label}</p>
+                        <div className="space-y-1.5">
+                          {group.keys.map(key => (
+                            <PermToggle key={key} label={PERM_LABELS[key]}
+                              checked={editPerms[key] || false}
+                              onChange={() => setEditPerms(p => ({ ...p, [key]: !p[key] }))} />
+                          ))}
+                        </div>
+                      </div>
                     ))}
                     <div className="flex gap-2 justify-end mt-3">
                       <button onClick={() => setEditId(null)} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-xl transition">Cancel</button>

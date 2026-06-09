@@ -3,12 +3,13 @@ import { Link } from 'react-router-dom'
 import {
   Users, Search, Eye, EyeOff, KeyRound, ScrollText, BarChart2,
   ChevronLeft, ChevronRight, X, AlertTriangle, TrendingUp,
-  Calendar, Filter, CheckCircle,
+  Calendar, Filter, CheckCircle, RefreshCw,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import {
   getOwnerStudentsManagement, getStudentLeavesHistory,
   getStudentAttendanceSummary, resetUserPassword,
+  reassignStudent, getActiveBatchesWithTrainers,
 } from '../api/index.js'
 
 const PAGE_SIZE = 15
@@ -294,6 +295,109 @@ function AttendanceReportModal({ student, onClose }) {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
+// ── Reassign Batch Modal ───────────────────────────────────────────────────────
+
+function ReassignBatchModal({ student, onClose, onSuccess }) {
+  const [batches,  setBatches]  = useState([])
+  const [form, setForm] = useState({
+    new_batch_id: '', new_trainer_id: '', reason: '',
+    effective_date: new Date().toISOString().slice(0,10),
+    keep_attendance: true,
+  })
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    getActiveBatchesWithTrainers()
+      .then(r => setBatches(r.data.batches || []))
+      .catch(() => {})
+  }, [])
+
+  const selectedBatch = batches.find(b => String(b.id) === String(form.new_batch_id))
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  useEffect(() => {
+    if (selectedBatch) set('new_trainer_id', String(selectedBatch.trainer_id))
+  }, [form.new_batch_id])
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!form.new_batch_id) { toast.error('Please select a new batch'); return }
+    if (!form.reason.trim()) { toast.error('Please enter a reason'); return }
+    setLoading(true)
+    try {
+      await reassignStudent(student.id, {
+        new_batch_id:    Number(form.new_batch_id),
+        new_trainer_id:  form.new_trainer_id ? Number(form.new_trainer_id) : null,
+        reason:          form.reason.trim(),
+        effective_date:  form.effective_date,
+        keep_attendance: form.keep_attendance,
+      })
+      toast.success(`${student.name} reassigned successfully`)
+      onSuccess()
+      onClose()
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Reassignment failed')
+    } finally { setLoading(false) }
+  }
+
+  const uniqueTrainers = [...new Map(batches.filter(b => b.trainer_id).map(b => [b.trainer_id, b.trainer_name])).entries()]
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 relative">
+        <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={18} /></button>
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-10 h-10 rounded-xl bg-brand-blue-light flex items-center justify-center">
+            <RefreshCw className="w-5 h-5 text-brand-blue" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-slate-800">Change Batch</h3>
+            <p className="text-xs text-slate-500">{student.name} · Currently in <strong>{student.batch_name || 'No batch'}</strong></p>
+          </div>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <label className="text-xs font-semibold text-slate-600 mb-1 block">New Batch *</label>
+            <select value={form.new_batch_id} onChange={e => set('new_batch_id', e.target.value)}
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white">
+              <option value="">Select batch…</option>
+              {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-600 mb-1 block">New Trainer</label>
+            <select value={form.new_trainer_id} onChange={e => set('new_trainer_id', e.target.value)}
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white">
+              <option value="">Auto (from batch)</option>
+              {uniqueTrainers.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-600 mb-1 block">Reason for Reassignment *</label>
+            <textarea value={form.reason} onChange={e => set('reason', e.target.value)} rows={2}
+              placeholder="Why is the student being moved?"
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary resize-none" />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-600 mb-1 block">Effective Date</label>
+            <input type="date" value={form.effective_date} onChange={e => set('effective_date', e.target.value)}
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" />
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer pt-1">
+            <input type="checkbox" checked={form.keep_attendance} onChange={e => set('keep_attendance', e.target.checked)} className="rounded" />
+            <span className="text-sm text-slate-700">Keep existing attendance records</span>
+          </label>
+          <button type="submit" disabled={loading}
+            className="w-full bg-brand-blue hover:bg-brand-blue-dark text-white font-semibold py-2.5 rounded-xl text-sm disabled:opacity-60 transition mt-1">
+            {loading ? 'Reassigning…' : 'Confirm Reassignment'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 export default function OwnerStudents() {
   const [students, setStudents]     = useState([])
   const [loading, setLoading]       = useState(true)
@@ -303,9 +407,10 @@ export default function OwnerStudents() {
   const [statusFilter, setStatusFilter]   = useState('all')
   const [page, setPage]             = useState(1)
 
-  const [resetStudent, setResetStudent]         = useState(null)
-  const [leaveStudent, setLeaveStudent]         = useState(null)
+  const [resetStudent, setResetStudent]           = useState(null)
+  const [leaveStudent, setLeaveStudent]           = useState(null)
   const [attendanceStudent, setAttendanceStudent] = useState(null)
+  const [reassignStudent, setReassignStudent]     = useState(null)
 
   useEffect(() => {
     getOwnerStudentsManagement()
@@ -513,6 +618,10 @@ export default function OwnerStudents() {
                             className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition" title="View Attendance Report">
                             <BarChart2 size={14} />
                           </button>
+                          <button onClick={() => setReassignStudent(s)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-brand-blue hover:bg-brand-blue-light transition" title="Change Batch">
+                            <RefreshCw size={14} />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -548,6 +657,7 @@ export default function OwnerStudents() {
       {resetStudent     && <ResetPasswordModal     student={resetStudent}     onClose={() => setResetStudent(null)} />}
       {leaveStudent     && <LeaveHistoryModal       student={leaveStudent}     onClose={() => setLeaveStudent(null)} />}
       {attendanceStudent && <AttendanceReportModal  student={attendanceStudent} onClose={() => setAttendanceStudent(null)} />}
+      {reassignStudent   && <ReassignBatchModal student={reassignStudent} onClose={() => setReassignStudent(null)} onSuccess={() => { setStudents([]); setLoading(true); getOwnerStudentsManagement().then(r => setStudents(r.data.students || [])).finally(() => setLoading(false)) }} />}
     </div>
   )
 }

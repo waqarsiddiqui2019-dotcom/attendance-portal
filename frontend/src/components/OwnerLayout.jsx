@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { NavLink, useNavigate, useLocation, Outlet } from 'react-router-dom'
-import { LayoutDashboard, Users, BookOpen, Library, CalendarDays, ScrollText, MessageSquare, Shield, GraduationCap, LogOut, Menu, X } from 'lucide-react'
+import { LayoutDashboard, Users, BookOpen, Library, CalendarDays, ScrollText, MessageSquare, Shield, GraduationCap, ClipboardList, NotebookPen, LogOut, Menu, X } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { getOwnerStats, getMessageUnreadCount } from '../api/index.js'
 import NotificationBell from './NotificationBell.jsx'
@@ -29,10 +29,12 @@ export default function OwnerLayout() {
   const navItems = [
     { to: '/owner/dashboard',       icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/owner/team',            icon: Users,           label: 'Team',          badge: pendingCount },
+    { to: '/owner/admissions',      icon: ClipboardList,   label: 'Admissions' },
     { to: '/owner/batches',         icon: BookOpen,        label: 'All Batches' },
     { to: '/owner/topics-library',  icon: Library,         label: 'Topics Library' },
     { to: '/owner/calendars',       icon: CalendarDays,    label: 'Calendars' },
     { to: '/owner/students',        icon: GraduationCap,   label: 'Students' },
+    { to: '/owner/daily-log',       icon: NotebookPen,     label: 'Daily Log' },
     { to: '/owner/leave-log',       icon: ScrollText,      label: 'Leave Log' },
     { to: '/owner/messages',        icon: MessageSquare,   label: 'Messages',      badge: msgCount },
     { to: '/owner/staff',           icon: Shield,          label: 'Staff Roles' },

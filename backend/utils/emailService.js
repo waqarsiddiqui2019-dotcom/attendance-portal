@@ -350,6 +350,140 @@ async function sendTestEmail(to) {
   await sendEmail(to, 'Define Digital Portal — Email System Test', testEmailHtml())
 }
 
+// ── Template 10: Student Welcome Email ────────────────────────────────────────
+function studentWelcomeEmail(studentName, email, password, batchName, trainerName, startDate, portalLink) {
+  const batchInfo = batchName ? `
+    <table style="width:100%;border-collapse:collapse;margin-top:16px;">
+      ${batchName  ? `<tr><td style="padding:6px 0;color:#64748b;font-size:13px;">Batch</td><td style="padding:6px 0;font-weight:600;color:#1e293b;">${batchName}</td></tr>` : ''}
+      ${trainerName? `<tr><td style="padding:6px 0;color:#64748b;font-size:13px;">Trainer</td><td style="padding:6px 0;font-weight:600;color:#1e293b;">${trainerName}</td></tr>` : ''}
+      ${startDate  ? `<tr><td style="padding:6px 0;color:#64748b;font-size:13px;">Start Date</td><td style="padding:6px 0;font-weight:600;color:#1e293b;">${startDate}</td></tr>` : ''}
+    </table>` : ''
+
+  const body = `
+    <p style="font-size:16px;color:#334155;margin:0 0 16px;">Hi <strong>${studentName}</strong>,</p>
+    <p style="font-size:14px;color:#64748b;margin:0 0 20px;">Welcome to <strong>Define Digital Institute</strong>! We're thrilled to have you on board. Your student account has been created and you're all set to begin your learning journey.</p>
+
+    <div style="background:#f8fafc;border:2px solid #e2e8f0;border-radius:12px;padding:20px;margin:20px 0;">
+      <p style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin:0 0 12px;">Your Login Credentials</p>
+      <table style="width:100%;border-collapse:collapse;">
+        <tr><td style="padding:6px 0;color:#64748b;font-size:13px;width:100px;">Portal URL</td>
+            <td style="padding:6px 0;"><a href="${portalLink}" style="color:#2272B9;font-weight:600;">${portalLink}</a></td></tr>
+        <tr><td style="padding:6px 0;color:#64748b;font-size:13px;">Email</td>
+            <td style="padding:6px 0;font-weight:600;color:#1e293b;font-family:monospace;">${email}</td></tr>
+        <tr><td style="padding:6px 0;color:#64748b;font-size:13px;">Password</td>
+            <td style="padding:6px 0;font-weight:600;color:#1e293b;font-family:monospace;">${password}</td></tr>
+      </table>
+    </div>
+
+    <div style="background:#FEF3D9;border-left:4px solid #F5A623;padding:12px 16px;border-radius:0 8px 8px 0;margin:0 0 20px;">
+      <p style="margin:0;font-size:13px;color:#78350f;">🔐 Please <strong>change your password</strong> after your first login to keep your account secure.</p>
+    </div>
+
+    ${batchName ? `<div style="background:#f0f9ff;border-radius:12px;padding:16px;margin:0 0 20px;"><p style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin:0 0 8px;">Your Batch Details</p>${batchInfo}</div>` : ''}
+
+    <div style="margin:0 0 20px;">
+      <p style="font-size:14px;font-weight:600;color:#1e293b;margin:0 0 12px;">What's Next?</p>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        ${['Log in to your student portal','Check your schedule in the attendance calendar','Connect with your trainer for onboarding'].map((s,i) =>
+          `<div style="display:flex;align-items:flex-start;gap:10px;"><div style="min-width:24px;height:24px;background:#F5A623;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;">${i+1}</div><p style="margin:0;font-size:13px;color:#475569;padding-top:3px;">${s}</p></div>`
+        ).join('')}
+      </div>
+    </div>
+
+    <div style="text-align:center;margin-top:24px;">
+      <a href="${portalLink}" style="display:inline-block;background:#F5A623;color:#fff;text-decoration:none;padding:12px 32px;border-radius:10px;font-weight:700;font-size:15px;">Log In to Your Portal →</a>
+    </div>
+
+    <p style="font-size:12px;color:#94a3b8;margin-top:24px;text-align:center;">Questions? Contact us at <a href="mailto:definedigitalinstitute@gmail.com" style="color:#2272B9;">definedigitalinstitute@gmail.com</a></p>
+  `
+  return baseLayout('#1B3A6B',
+    `<h1 style="margin:0;font-size:22px;font-weight:700;color:#fff;">Welcome to Define Digital!</h1>
+     <p style="margin:8px 0 0;color:rgba(255,255,255,0.8);font-size:14px;">Become a digital leader — your journey starts today</p>`,
+    body
+  )
+}
+
+// ── Template 11: Daily Activity Report ────────────────────────────────────────
+function dailyReportEmail(reportDate, snapshot, activities, followups, absences, pendingLeaves, tomorrow) {
+  const fmtDate = (d) => { try { return new Date(d + 'T00:00:00').toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'}) } catch { return d } }
+
+  const sectionHeader = (title) =>
+    `<tr><td colspan="5" style="background:#f8fafc;padding:10px 16px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#64748b;border-top:1px solid #e2e8f0;">${title}</td></tr>`
+
+  const outcomeColor = { positive:'#10b981', pending:'#f59e0b', negative:'#ef4444', informational:'#3b82f6' }
+  const priorityBadge = { low:'#64748b', medium:'#f59e0b', high:'#f97316', urgent:'#ef4444' }
+
+  const activityRows = activities.length === 0
+    ? `<tr><td colspan="5" style="padding:16px;text-align:center;color:#94a3b8;font-size:13px;">No activities logged today</td></tr>`
+    : activities.map(a => `
+      <tr style="border-bottom:1px solid #f1f5f9;">
+        <td style="padding:8px 12px;font-size:13px;color:#64748b;white-space:nowrap;">${a.log_time}</td>
+        <td style="padding:8px 12px;font-size:13px;color:#1e293b;font-weight:500;">${a.category_label || a.category}</td>
+        <td style="padding:8px 12px;font-size:13px;color:#475569;">${a.person_name || a.student_name || '—'}</td>
+        <td style="padding:8px 12px;font-size:13px;color:#475569;max-width:200px;">${(a.description || '').slice(0, 80)}${a.description?.length > 80 ? '...' : ''}</td>
+        <td style="padding:8px 12px;"><span style="background:${outcomeColor[a.outcome]||'#94a3b8'}20;color:${outcomeColor[a.outcome]||'#64748b'};font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;text-transform:capitalize;">${a.outcome}</span></td>
+      </tr>`).join('')
+
+  const followupRows = followups.length === 0
+    ? `<tr><td colspan="4" style="padding:12px;text-align:center;color:#94a3b8;font-size:13px;">No pending follow-ups</td></tr>`
+    : followups.map(f => {
+        const overdue = f.followup_date && f.followup_date < reportDate
+        return `<tr style="border-bottom:1px solid #f1f5f9;${overdue?'background:#fff5f5;':''}">
+          <td style="padding:8px 12px;font-size:13px;color:${overdue?'#ef4444':'#64748b'};">${f.followup_date || f.log_date}${overdue?' ⚠️ Overdue':''}</td>
+          <td style="padding:8px 12px;font-size:13px;color:#475569;">${f.category_label || f.category}</td>
+          <td style="padding:8px 12px;font-size:13px;color:#475569;">${f.person_name || f.student_name || '—'}</td>
+          <td style="padding:8px 12px;font-size:13px;color:#64748b;">${(f.followup_note || '').slice(0, 60)}</td>
+        </tr>`}).join('')
+
+  const body = `
+    <div style="background:#f8fafc;border-radius:12px;padding:16px;margin:0 0 20px;display:flex;gap:12px;flex-wrap:wrap;">
+      ${[
+        ['Sessions Today',    snapshot.sessions     || 0, '#2272B9'],
+        ['Attendance',        `${snapshot.present||0}/${snapshot.total||0}`, '#10b981'],
+        ['New Admissions',    snapshot.admissions   || 0, '#F5A623'],
+        ['Active Batches',    snapshot.batches      || 0, '#8b5cf6'],
+        ['Activities Logged', activities.length,          '#f59e0b'],
+      ].map(([label, val, color]) => `
+        <div style="flex:1;min-width:100px;background:#fff;border-radius:10px;padding:12px;text-align:center;border:1px solid #e2e8f0;">
+          <p style="font-size:24px;font-weight:700;color:${color};margin:0;">${val}</p>
+          <p style="font-size:11px;color:#94a3b8;margin:4px 0 0;text-transform:uppercase;letter-spacing:0.5px;">${label}</p>
+        </div>`).join('')}
+    </div>
+
+    <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+      <thead><tr style="background:#f8fafc;">
+        <th style="padding:10px 12px;text-align:left;font-size:12px;color:#64748b;font-weight:600;">Time</th>
+        <th style="padding:10px 12px;text-align:left;font-size:12px;color:#64748b;font-weight:600;">Category</th>
+        <th style="padding:10px 12px;text-align:left;font-size:12px;color:#64748b;font-weight:600;">Person</th>
+        <th style="padding:10px 12px;text-align:left;font-size:12px;color:#64748b;font-weight:600;">Description</th>
+        <th style="padding:10px 12px;text-align:left;font-size:12px;color:#64748b;font-weight:600;">Outcome</th>
+      </tr></thead>
+      <tbody>${activityRows}</tbody>
+    </table>
+
+    ${followups.length > 0 ? `
+    <p style="font-size:13px;font-weight:700;color:#1e293b;margin:20px 0 8px;text-transform:uppercase;letter-spacing:0.5px;">Pending Follow-Ups</p>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+      <thead><tr style="background:#fff5e6;"><th style="padding:8px 12px;text-align:left;font-size:12px;color:#78350f;">Due Date</th><th style="padding:8px 12px;text-align:left;font-size:12px;color:#78350f;">Category</th><th style="padding:8px 12px;text-align:left;font-size:12px;color:#78350f;">Person</th><th style="padding:8px 12px;text-align:left;font-size:12px;color:#78350f;">Note</th></tr></thead>
+      <tbody>${followupRows}</tbody>
+    </table>` : ''}
+
+    ${absences.length > 0 ? `<p style="font-size:13px;font-weight:700;color:#1e293b;margin:16px 0 8px;">Absent Today (${absences.length})</p><p style="font-size:13px;color:#475569;">${absences.map(a=>`${a.name} (${a.batch_name})`).join(', ')}</p>` : ''}
+
+    ${pendingLeaves.length > 0 ? `<div style="background:#fff5e6;border-left:4px solid #F5A623;padding:12px 16px;border-radius:0 8px 8px 0;margin:16px 0;"><p style="margin:0;font-size:13px;color:#78350f;font-weight:600;">⏳ ${pendingLeaves.length} leave request${pendingLeaves.length>1?'s':''} pending response for 24+ hours</p></div>` : ''}
+
+    <p style="font-size:11px;color:#94a3b8;margin-top:24px;text-align:center;border-top:1px solid #f1f5f9;padding-top:16px;">
+      This is your automated daily report from Define Digital Portal.<br>
+      To change report time, go to Settings → Email Reports.
+    </p>
+  `
+  return baseLayout('#1B3A6B',
+    `<h1 style="margin:0;font-size:20px;font-weight:700;color:#fff;">Daily Activity Report</h1>
+     <p style="margin:6px 0 0;color:rgba(255,255,255,0.8);font-size:14px;">${fmtDate(reportDate)}</p>`,
+    body
+  )
+}
+
 module.exports = {
   sendEmail,
   sendTestEmail,
@@ -362,4 +496,6 @@ module.exports = {
   trainerNewLeaveRequestEmail,
   passwordResetEmail,
   passwordForgotEmail,
+  studentWelcomeEmail,
+  dailyReportEmail,
 }
