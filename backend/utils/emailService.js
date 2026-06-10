@@ -19,22 +19,32 @@ const transporter = nodemailer.createTransport({
   },
 })
 
+// Verify SMTP connection at startup so Railway logs show immediately if creds are wrong
+transporter.verify((err, success) => {
+  if (err) console.error('[Email] SMTP CONNECTION FAILED:', err.message, err.code || '')
+  else     console.log('[Email] SMTP connection verified OK')
+})
+
 async function sendEmail(to, subject, htmlContent) {
   if (!emailUser || !emailPass) {
     console.warn('[Email] EMAIL_USER or EMAIL_PASS not configured — skipping send')
     return
   }
+  console.log(`[Email] Attempting to send to: ${to} | subject: ${subject}`)
   try {
-    await transporter.sendMail({
+    const info = await transporter.sendMail({
       from: process.env.EMAIL_FROM || `Define Digital Institute <${emailUser}>`,
       replyTo: process.env.ADMIN_EMAIL || emailUser,
       to,
       subject,
       html: htmlContent,
     })
-    console.log(`[Email] Sent "${subject}" to ${to}`)
+    console.log(`[Email] SENT successfully to: ${to} | messageId: ${info.messageId}`)
   } catch (err) {
-    console.error(`[Email] Failed to send "${subject}" to ${to}:`, err.message)
+    console.error(`[Email] FAILED to send to: ${to} | subject: ${subject}`)
+    console.error(`[Email] Error message: ${err.message}`)
+    console.error(`[Email] Error code: ${err.code || '(none)'}`)
+    console.error(`[Email] SMTP response: ${err.response || '(none)'}`)
     // Never throw — email failure must not crash portal
   }
 }
