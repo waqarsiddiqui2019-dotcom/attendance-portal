@@ -3,10 +3,11 @@ const path = require('path');
 const fs = require('fs');
 const bcrypt = require('bcryptjs');
 
-const dataDir = path.join(__dirname, 'data');
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+const dbPath = process.env.DB_PATH || path.join(__dirname, 'data', 'attendance.db');
+const dbDir = path.dirname(dbPath);
+if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
 
-const dbPath = path.join(__dirname, 'data', 'attendance.db');
+console.log('[DB] Using database at:', dbPath);
 const db = new Database(dbPath);
 
 db.pragma('journal_mode = WAL');
