@@ -11,8 +11,9 @@ console.log('[Email] EMAIL_PASS starts with:', emailPass.substring(0, 5) || '(no
 
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
-  port: 587,
-  secure: false,
+  port: 465,
+  secure: true,
+  family: 4,  // Force IPv4 — Railway does not support outbound IPv6
   auth: {
     user: emailUser,
     pass: emailPass,
