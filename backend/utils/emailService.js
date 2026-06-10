@@ -1,27 +1,33 @@
 const nodemailer = require('nodemailer')
 
-// Strip spaces from Gmail app password (stored with spaces for readability)
+// Strip all whitespace from Gmail app password (app passwords have spaces for readability)
 const emailPass = (process.env.EMAIL_PASS || '').replace(/\s/g, '')
+const emailUser = (process.env.EMAIL_USER || '').trim()
+
+// Debug log at startup so Railway logs show SMTP config state
+console.log('[Email] EMAIL_USER:', emailUser.substring(0, 10) || '(not set)')
+console.log('[Email] EMAIL_PASS length:', emailPass.length)
+console.log('[Email] EMAIL_PASS starts with:', emailPass.substring(0, 5) || '(not set)')
 
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
   port: 587,
   secure: false,
   auth: {
-    user: process.env.EMAIL_USER,
+    user: emailUser,
     pass: emailPass,
   },
 })
 
 async function sendEmail(to, subject, htmlContent) {
-  if (!process.env.EMAIL_USER || !emailPass) {
+  if (!emailUser || !emailPass) {
     console.warn('[Email] EMAIL_USER or EMAIL_PASS not configured — skipping send')
     return
   }
   try {
     await transporter.sendMail({
-      from: process.env.EMAIL_FROM || `Define Digital Institute <${process.env.EMAIL_USER}>`,
-      replyTo: process.env.ADMIN_EMAIL || process.env.EMAIL_USER,
+      from: process.env.EMAIL_FROM || `Define Digital Institute <${emailUser}>`,
+      replyTo: process.env.ADMIN_EMAIL || emailUser,
       to,
       subject,
       html: htmlContent,
