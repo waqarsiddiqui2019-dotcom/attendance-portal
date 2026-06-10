@@ -11,166 +11,11 @@ console.log('[DB] Using database at:', dbPath);
 const db = new Database(dbPath);
 
 db.pragma('journal_mode = WAL');
-
-// ── Migration: upgrade users table to support owner role + status ──────────
-const usersExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get();
-if (usersExists) {
-  const cols = db.prepare('PRAGMA table_info(users)').all().map(c => c.name);
-  if (!cols.includes('status')) {
-    console.log('[DB] Migrating: adding status column and owner role...');
-    db.pragma('foreign_keys = OFF');
-    db.exec(`
-      CREATE TABLE users_new (
-        id          INTEGER PRIMARY KEY AUTOINCREMENT,
-        name        TEXT NOT NULL,
-        email       TEXT UNIQUE NOT NULL,
-        password    TEXT NOT NULL,
-        role        TEXT NOT NULL CHECK(role IN ('owner','co_owner','admin','trainer','student')),
-        status      TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','pending','rejected')),
-        created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
-      INSERT INTO users_new (id, name, email, password, role, status, created_at)
-        SELECT id, name, email, password, role, 'active', created_at FROM users;
-      DROP TABLE users;
-      ALTER TABLE users_new RENAME TO users;
-    `);
-    db.pragma('foreign_keys = ON');
-    console.log('[DB] Migration complete.');
-  }
-}
-
-// ── Migration: expand role constraint to include co_owner and admin ─────────
-{
-  const row = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get();
-  if (row && !row.sql.includes('co_owner')) {
-    console.log('[DB] Migrating: expanding role constraint for co_owner/admin...');
-    db.pragma('foreign_keys = OFF');
-    db.exec(`
-      CREATE TABLE users_roles_new (
-        id          INTEGER PRIMARY KEY AUTOINCREMENT,
-        name        TEXT NOT NULL,
-        email       TEXT UNIQUE NOT NULL,
-        password    TEXT NOT NULL,
-        role        TEXT NOT NULL CHECK(role IN ('owner','co_owner','admin','trainer','student')),
-        status      TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','pending','rejected')),
-        created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
-      INSERT INTO users_roles_new SELECT * FROM users;
-      DROP TABLE users;
-      ALTER TABLE users_roles_new RENAME TO users;
-    `);
-    db.pragma('foreign_keys = ON');
-    console.log('[DB] Role expansion migration complete.');
-  }
-}
-
-// ── Migration: add 'inactive' to users status constraint ─────────────────────
-{
-  const row = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get();
-  if (row && !row.sql.includes('inactive')) {
-    console.log('[DB] Migrating: adding inactive to user status constraint...');
-    db.pragma('foreign_keys = OFF');
-    db.exec(`
-      CREATE TABLE users_inactive_new (
-        id          INTEGER PRIMARY KEY AUTOINCREMENT,
-        name        TEXT NOT NULL,
-        email       TEXT UNIQUE NOT NULL,
-        password    TEXT NOT NULL,
-        role        TEXT NOT NULL CHECK(role IN ('owner','co_owner','admin','trainer','student')),
-        status      TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','pending','rejected','inactive')),
-        created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
-        last_seen   DATETIME
-      );
-      INSERT INTO users_inactive_new SELECT id, name, email, password, role, status, created_at, last_seen FROM users;
-      DROP TABLE users;
-      ALTER TABLE users_inactive_new RENAME TO users;
-    `);
-    db.pragma('foreign_keys = ON');
-    console.log('[DB] Inactive status migration complete.');
-  }
-}
-
 db.pragma('foreign_keys = ON');
 
-// ── Migrate: add last_seen to users ──────────────────────────────────────
-{
-  const cols = db.prepare('PRAGMA table_info(users)').all().map(c => c.name)
-  if (!cols.includes('last_seen')) {
-    db.exec('ALTER TABLE users ADD COLUMN last_seen DATETIME')
-    console.log('[DB] Added last_seen column to users')
-  }
-}
-
-// ── Migrate: add schedule fields to batches ───────────────────────────────
-const batchCols = db.prepare('PRAGMA table_info(batches)').all().map(c => c.name);
-if (!batchCols.includes('mode')) {
-  db.exec(`ALTER TABLE batches ADD COLUMN mode TEXT DEFAULT 'offline'`);
-  console.log('[DB] Added mode column to batches');
-}
-if (!batchCols.includes('sessions_per_week')) {
-  db.exec(`ALTER TABLE batches ADD COLUMN sessions_per_week INTEGER`);
-  console.log('[DB] Added sessions_per_week column to batches');
-}
-if (!batchCols.includes('class_days')) {
-  db.exec(`ALTER TABLE batches ADD COLUMN class_days TEXT`);
-  console.log('[DB] Added class_days column to batches');
-}
-if (!batchCols.includes('status')) {
-  db.exec(`ALTER TABLE batches ADD COLUMN status TEXT DEFAULT 'active'`);
-  console.log('[DB] Added status column to batches');
-}
-
-// ── Migrate: add new permission columns to staff_permissions ─────────────
-{
-  const spCols = db.prepare('PRAGMA table_info(staff_permissions)').all().map(c => c.name)
-  const newPerms = [
-    ['can_admit_students',    'INTEGER NOT NULL DEFAULT 0'],
-    ['can_reassign_students', 'INTEGER NOT NULL DEFAULT 0'],
-    ['can_send_announcements','INTEGER NOT NULL DEFAULT 0'],
-    ['can_view_financials',   'INTEGER NOT NULL DEFAULT 0'],
-    ['can_manage_daily_log',  'INTEGER NOT NULL DEFAULT 0'],
-  ]
-  for (const [col, def] of newPerms) {
-    if (!spCols.includes(col)) {
-      db.exec(`ALTER TABLE staff_permissions ADD COLUMN ${col} ${def}`)
-      console.log(`[DB] Added ${col} to staff_permissions`)
-    }
-  }
-}
-
-// ── Migrate: add confirmation tracking to attendance ─────────────────────
-{
-  const attCols = db.prepare('PRAGMA table_info(attendance)').all().map(c => c.name)
-  if (!attCols.includes('confirm_token')) {
-    db.exec('ALTER TABLE attendance ADD COLUMN confirm_token TEXT')
-    console.log('[DB] Added confirm_token to attendance')
-  }
-  if (!attCols.includes('confirmed_at')) {
-    db.exec('ALTER TABLE attendance ADD COLUMN confirmed_at DATETIME')
-    console.log('[DB] Added confirmed_at to attendance')
-  }
-}
-
-// ── Migrate: add columns to topics ───────────────────────────────────────
-const topicCols = db.prepare('PRAGMA table_info(topics)').all().map(c => c.name);
-if (!topicCols.includes('mode')) {
-  db.exec(`ALTER TABLE topics ADD COLUMN mode TEXT`);
-  console.log('[DB] Added mode to topics');
-}
-if (!topicCols.includes('duration_hours')) {
-  db.exec(`ALTER TABLE topics ADD COLUMN duration_hours REAL DEFAULT 1`);
-  console.log('[DB] Added duration_hours to topics');
-}
-if (!topicCols.includes('completion_status')) {
-  db.exec(`ALTER TABLE topics ADD COLUMN completion_status TEXT DEFAULT 'pending'`);
-  console.log('[DB] Added completion_status to topics');
-}
-if (!topicCols.includes('is_revision')) {
-  db.exec(`ALTER TABLE topics ADD COLUMN is_revision INTEGER DEFAULT 0`);
-  console.log('[DB] Added is_revision to topics');
-}
-
-// ── Create tables (fresh install) ─────────────────────────────────────────
+// ── Step 1: Create all tables unconditionally (IF NOT EXISTS = safe always) ──
+// All columns — including those previously added via ALTER TABLE — are included
+// here so a fresh database gets the complete schema in one shot.
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -179,7 +24,8 @@ db.exec(`
     password    TEXT NOT NULL,
     role        TEXT NOT NULL CHECK(role IN ('owner','co_owner','admin','trainer','student')),
     status      TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','pending','rejected','inactive')),
-    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_seen   DATETIME
   );
 
   CREATE TABLE IF NOT EXISTS batches (
@@ -224,13 +70,16 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS topics (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    batch_id    INTEGER NOT NULL,
-    date        TEXT NOT NULL,
-    title       TEXT NOT NULL,
-    notes       TEXT,
-    mode        TEXT,
-    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    batch_id          INTEGER NOT NULL,
+    date              TEXT NOT NULL,
+    title             TEXT NOT NULL,
+    notes             TEXT,
+    mode              TEXT,
+    duration_hours    REAL DEFAULT 1,
+    completion_status TEXT DEFAULT 'pending',
+    is_revision       INTEGER DEFAULT 0,
+    created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE CASCADE,
     UNIQUE(batch_id, date)
   );
@@ -411,23 +260,23 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS daily_log (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    logged_by        INTEGER NOT NULL,
-    log_date         TEXT NOT NULL,
-    log_time         TEXT NOT NULL,
-    category         TEXT NOT NULL DEFAULT 'other',
-    person_name      TEXT,
-    student_id       INTEGER,
-    description      TEXT NOT NULL,
-    outcome          TEXT NOT NULL DEFAULT 'informational',
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    logged_by         INTEGER NOT NULL,
+    log_date          TEXT NOT NULL,
+    log_time          TEXT NOT NULL,
+    category          TEXT NOT NULL DEFAULT 'other',
+    person_name       TEXT,
+    student_id        INTEGER,
+    description       TEXT NOT NULL,
+    outcome           TEXT NOT NULL DEFAULT 'informational',
     followup_required INTEGER NOT NULL DEFAULT 0,
-    followup_date    TEXT,
-    followup_note    TEXT,
-    followup_done    INTEGER NOT NULL DEFAULT 0,
-    priority         TEXT NOT NULL DEFAULT 'medium',
-    created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (logged_by)   REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (student_id)  REFERENCES users(id)
+    followup_date     TEXT,
+    followup_note     TEXT,
+    followup_done     INTEGER NOT NULL DEFAULT 0,
+    priority          TEXT NOT NULL DEFAULT 'medium',
+    created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (logged_by)  REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (student_id) REFERENCES users(id)
   );
 
   CREATE TABLE IF NOT EXISTS settings (
@@ -447,20 +296,74 @@ db.exec(`
   );
 `);
 
-// ── Seed owner account ─────────────────────────────────────────────────────
+// ── Step 2: Migrations (upgrade old databases that predate certain columns) ───
+// All PRAGMA table_info calls are safe here because tables now exist above.
+// These are no-ops on fresh databases (columns already in CREATE TABLE above).
+
+// Migrate: add last_seen to users
+{
+  const cols = db.prepare('PRAGMA table_info(users)').all().map(c => c.name);
+  if (!cols.includes('last_seen')) {
+    db.exec('ALTER TABLE users ADD COLUMN last_seen DATETIME');
+    console.log('[DB] Added last_seen column to users');
+  }
+}
+
+// Migrate: add schedule fields to batches
+{
+  const cols = db.prepare('PRAGMA table_info(batches)').all().map(c => c.name);
+  if (!cols.includes('mode'))              { db.exec(`ALTER TABLE batches ADD COLUMN mode TEXT DEFAULT 'offline'`);    console.log('[DB] Added mode to batches'); }
+  if (!cols.includes('sessions_per_week')) { db.exec(`ALTER TABLE batches ADD COLUMN sessions_per_week INTEGER`);     console.log('[DB] Added sessions_per_week to batches'); }
+  if (!cols.includes('class_days'))        { db.exec(`ALTER TABLE batches ADD COLUMN class_days TEXT`);               console.log('[DB] Added class_days to batches'); }
+  if (!cols.includes('status'))            { db.exec(`ALTER TABLE batches ADD COLUMN status TEXT DEFAULT 'active'`);  console.log('[DB] Added status to batches'); }
+}
+
+// Migrate: add confirmation tracking to attendance
+{
+  const cols = db.prepare('PRAGMA table_info(attendance)').all().map(c => c.name);
+  if (!cols.includes('confirm_token')) { db.exec('ALTER TABLE attendance ADD COLUMN confirm_token TEXT');    console.log('[DB] Added confirm_token to attendance'); }
+  if (!cols.includes('confirmed_at'))  { db.exec('ALTER TABLE attendance ADD COLUMN confirmed_at DATETIME'); console.log('[DB] Added confirmed_at to attendance'); }
+}
+
+// Migrate: add extended columns to topics
+{
+  const cols = db.prepare('PRAGMA table_info(topics)').all().map(c => c.name);
+  if (!cols.includes('mode'))              { db.exec(`ALTER TABLE topics ADD COLUMN mode TEXT`);                                   console.log('[DB] Added mode to topics'); }
+  if (!cols.includes('duration_hours'))    { db.exec(`ALTER TABLE topics ADD COLUMN duration_hours REAL DEFAULT 1`);               console.log('[DB] Added duration_hours to topics'); }
+  if (!cols.includes('completion_status')) { db.exec(`ALTER TABLE topics ADD COLUMN completion_status TEXT DEFAULT 'pending'`);    console.log('[DB] Added completion_status to topics'); }
+  if (!cols.includes('is_revision'))       { db.exec(`ALTER TABLE topics ADD COLUMN is_revision INTEGER DEFAULT 0`);              console.log('[DB] Added is_revision to topics'); }
+}
+
+// Migrate: add extended permission columns to staff_permissions
+{
+  const cols = db.prepare('PRAGMA table_info(staff_permissions)').all().map(c => c.name);
+  const newPerms = [
+    ['can_admit_students',    'INTEGER NOT NULL DEFAULT 0'],
+    ['can_reassign_students', 'INTEGER NOT NULL DEFAULT 0'],
+    ['can_send_announcements','INTEGER NOT NULL DEFAULT 0'],
+    ['can_view_financials',   'INTEGER NOT NULL DEFAULT 0'],
+    ['can_manage_daily_log',  'INTEGER NOT NULL DEFAULT 0'],
+  ];
+  for (const [col, def] of newPerms) {
+    if (!cols.includes(col)) {
+      db.exec(`ALTER TABLE staff_permissions ADD COLUMN ${col} ${def}`);
+      console.log(`[DB] Added ${col} to staff_permissions`);
+    }
+  }
+}
+
+// ── Step 3: Seed owner account (only if not present) ─────────────────────────
 const OWNER_EMAIL = 'waqar@definedigital.in';
-const existingOwner = db.prepare('SELECT id FROM users WHERE email = ?').get(OWNER_EMAIL);
-if (!existingOwner) {
+if (!db.prepare('SELECT id FROM users WHERE email = ?').get(OWNER_EMAIL)) {
   const hashed = bcrypt.hashSync('Admin@1234', 10);
   db.prepare(`INSERT INTO users (name, email, password, role, status) VALUES (?,?,?,'owner','active')`)
     .run('Waqar', OWNER_EMAIL, hashed);
   console.log(`[DB] Owner account created: ${OWNER_EMAIL} / Admin@1234`);
 }
 
-// ── Seed legacy trainer (pre-approved) ────────────────────────────────────
+// ── Step 4: Seed legacy trainer (only if not present) ────────────────────────
 const TRAINER_EMAIL = 'trainer@institute.com';
-const existingTrainer = db.prepare('SELECT id FROM users WHERE email = ?').get(TRAINER_EMAIL);
-if (!existingTrainer) {
+if (!db.prepare('SELECT id FROM users WHERE email = ?').get(TRAINER_EMAIL)) {
   const hashed = bcrypt.hashSync('trainer123', 10);
   db.prepare(`INSERT INTO users (name, email, password, role, status) VALUES (?,?,?,'trainer','active')`)
     .run('Admin Trainer', TRAINER_EMAIL, hashed);
