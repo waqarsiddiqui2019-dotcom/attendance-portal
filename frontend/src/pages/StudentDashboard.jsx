@@ -109,9 +109,11 @@ export default function StudentDashboard() {
     .filter((r) => r.date && r.status)
     .map((r) => {
       const cfg = STATUS_CONFIG[r.status?.toLowerCase()] || {}
+      const confirmable = ['present', 'late'].includes(r.status?.toLowerCase())
+      const confirmed   = confirmable && r.confirmed_at
       return {
         id: r.date,
-        title: cfg.label || r.status,
+        title: confirmed ? `${cfg.label || r.status} ✓` : (cfg.label || r.status),
         start: r.date?.split('T')[0] || r.date,
         backgroundColor: cfg.calColor || '#CBD5E1',
         borderColor: cfg.calBorder || '#94A3B8',
@@ -325,14 +327,17 @@ export default function StudentDashboard() {
                       <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">
                         Status
                       </th>
+                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">
+                        Confirmation
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {[...attendance]
                       .sort((a, b) => new Date(b.date) - new Date(a.date))
                       .map((record, i) => {
-                        const cfg =
-                          STATUS_CONFIG[record.status?.toLowerCase()] || {}
+                        const cfg = STATUS_CONFIG[record.status?.toLowerCase()] || {}
+                        const confirmable = ['present', 'late'].includes(record.status?.toLowerCase())
                         return (
                           <tr key={i} className="hover:bg-slate-50/50">
                             <td className="px-6 py-3.5 text-sm font-medium text-slate-700">
@@ -342,11 +347,24 @@ export default function StudentDashboard() {
                               <span
                                 className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${cfg.badge || 'bg-slate-100 text-slate-600'}`}
                               >
-                                {cfg.icon && (
-                                  <cfg.icon size={12} />
-                                )}
+                                {cfg.icon && <cfg.icon size={12} />}
                                 {cfg.label || record.status}
                               </span>
+                            </td>
+                            <td className="px-6 py-3.5">
+                              {confirmable ? (
+                                record.confirmed_at ? (
+                                  <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                    <CheckCircle size={11} /> Confirmed
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-200">
+                                    <Clock size={11} /> Pending
+                                  </span>
+                                )
+                              ) : (
+                                <span className="text-xs text-slate-400">—</span>
+                              )}
                             </td>
                           </tr>
                         )

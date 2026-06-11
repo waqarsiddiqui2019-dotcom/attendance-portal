@@ -12,11 +12,11 @@ console.log('[Email] Sender EMAIL_USER:', senderEmail.substring(0, 10) || '(not 
 async function sendEmail(to, subject, htmlContent) {
   if (!brevoKey) {
     console.warn('[Email] BREVO_API_KEY not set — skipping send')
-    return
+    return false
   }
   if (!senderEmail) {
     console.warn('[Email] EMAIL_USER (sender address) not set — skipping send')
-    return
+    return false
   }
 
   console.log(`[Email] Attempting to send to: ${to} | subject: ${subject}`)
@@ -39,16 +39,19 @@ async function sendEmail(to, subject, htmlContent) {
     if (res.ok) {
       const data = await res.json()
       console.log(`[Email] SENT successfully to: ${to} | messageId: ${data.messageId || '(no id)'}`)
+      return true
     } else {
       const body = await res.text()
       console.error(`[Email] FAILED to send to: ${to} | subject: ${subject}`)
       console.error(`[Email] Brevo status: ${res.status} ${res.statusText}`)
       console.error(`[Email] Brevo response: ${body}`)
+      return false
     }
   } catch (err) {
     console.error(`[Email] FAILED to send to: ${to} | subject: ${subject}`)
     console.error(`[Email] Error: ${err.message}`)
     // Never throw — email failure must not crash portal
+    return false
   }
 }
 

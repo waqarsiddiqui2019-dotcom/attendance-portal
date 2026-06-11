@@ -703,8 +703,24 @@ export default function BatchDetail() {
     setSavingAttendance(true)
     try {
       const records = Object.entries(attendanceData).map(([student_id, status]) => ({ student_id, status: status || 'absent' }))
-      await markAttendance(id, { date: attendanceDate, records })
-      toast.success('Attendance saved ✅')
+      const res = await markAttendance(id, { date: attendanceDate, records })
+      toast.success(`Attendance saved for ${records.length} student${records.length !== 1 ? 's' : ''}`)
+
+      const emailsSent = res.data?.emailsSent || {}
+      const confirmCount = emailsSent.confirmations || 0
+      const absenceCount = emailsSent.absenceAlerts || 0
+      const failedCount  = emailsSent.failed || 0
+      if (confirmCount > 0 || absenceCount > 0 || failedCount > 0) {
+        const parts = []
+        if (confirmCount > 0) parts.push(`${confirmCount} confirmation${confirmCount !== 1 ? 's' : ''} sent`)
+        if (absenceCount > 0) parts.push(`${absenceCount} absence alert${absenceCount !== 1 ? 's' : ''} sent`)
+        if (failedCount  > 0) parts.push(`${failedCount} failed`)
+        toast(parts.join(' · '), {
+          icon: failedCount > 0 ? '⚠️' : '📧',
+          duration: 6000,
+          style: { fontSize: '13px', maxWidth: '380px' },
+        })
+      }
     } catch (err) { showError(err, { action: 'save-attendance', page: window.location.pathname }) }
     finally { setSavingAttendance(false) }
   }

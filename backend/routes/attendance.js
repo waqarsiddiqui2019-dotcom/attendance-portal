@@ -68,7 +68,8 @@ router.get('/batch/:batchId/date/:date', (req, res) => {
 
 // POST /api/attendance/batch/:batchId
 // Trainer: mark/update attendance
-router.post('/batch/:batchId', (req, res) => {
+router.post('/batch/:batchId', async (req, res) => {
+  console.log('[Attendance POST] Handler entered — batchId:', req.params.batchId, '| userId:', req.user?.id, '| role:', req.user?.role);
   try {
     if (req.user.role !== 'trainer') {
       return res.status(403).json({ error: 'Only trainers can mark attendance' });
@@ -108,51 +109,86 @@ router.post('/batch/:batchId', (req, res) => {
 
     markMany(records);
 
-    // Send emails asynchronously — failures never crash the response
+    // Email + in-app notification block — failures never crash the response
+    const emailCounts = { confirmations: 0, absenceAlerts: 0, failed: 0 };
     try {
-      console.log('[Attendance] Email block reached — records:', records.length, '| date:', date, '| batch:', batch.id);
+      console.log('[Attendance] Email+notif block reached — records:', records.length, '| date:', date, '| batch:', batch.id);
 
       const batchInfo = db.prepare(`
         SELECT b.*, u.name AS trainer_name FROM batches b
         JOIN users u ON b.trainer_id = u.id WHERE b.id = ?
       `).get(batch.id);
-      console.log('[Attendance] batchInfo loaded:', batchInfo ? batchInfo.name : 'NULL — no batch found');
+      console.log('[Attendance] batchInfo:', batchInfo ? batchInfo.name : 'NULL');
 
       const topic = db.prepare('SELECT title FROM topics WHERE batch_id = ? AND date = ?').get(batch.id, date);
       const topicName = topic?.title || 'Class Session';
+      const batchName = batchInfo?.name || 'your batch';
+      const trainerName = batchInfo?.trainer_name || 'your trainer';
+      const portalUrl = process.env.PORTAL_URL
+        || (process.env.RAILWAY_PUBLIC_DOMAIN ? 'https://' + process.env.RAILWAY_PUBLIC_DOMAIN : 'http://localhost:5000');
+
+      const insertNotif = db.prepare(`
+        INSERT INTO notifications (user_id, title, message, type, related_type, related_id)
+        VALUES (?, ?, ?, ?, 'attendance', ?)
+      `);
 
       for (const rec of records) {
         const student = db.prepare('SELECT id, name, email FROM users WHERE id = ?').get(rec.student_id);
-        console.log(`[Attendance] Student ${rec.student_id}: email=${student?.email || 'MISSING'} status=${rec.status}`);
-        if (!student?.email) { console.warn('[Attendance] Skipping — no email for student', rec.student_id); continue; }
+        if (!student) { console.warn('[Attendance] Student not found:', rec.student_id); continue; }
+
+        // In-app notification (always — even if email skipped)
+        try {
+          const statusLabel = rec.status.charAt(0).toUpperCase() + rec.status.slice(1);
+          if (['present', 'late'].includes(rec.status)) {
+            insertNotif.run(
+              student.id,
+              `Attendance Recorded — ${date}`,
+              `Your attendance for ${date} has been recorded as ${statusLabel} for ${batchName}. A confirmation email has been sent to your registered address.`,
+              'success', batch.id
+            );
+          } else {
+            insertNotif.run(
+              student.id,
+              `Absence Alert — ${date}`,
+              `You were marked absent on ${date} for ${batchName}. Please check your email for details.`,
+              'warning', batch.id
+            );
+          }
+        } catch (notifErr) {
+          console.warn('[Attendance] Notification insert failed for student', rec.student_id, notifErr.message);
+        }
+
+        if (!student.email) { console.warn('[Attendance] No email address for student', rec.student_id); continue; }
 
         if (['present', 'late'].includes(rec.status)) {
           const att = db.prepare('SELECT confirm_token FROM attendance WHERE batch_id = ? AND student_id = ? AND date = ?').get(batch.id, rec.student_id, date);
           console.log(`[Attendance] confirm_token for student ${rec.student_id}:`, att?.confirm_token || 'NULL');
           if (att?.confirm_token) {
-            const confirmLink = `${process.env.PORTAL_URL || process.env.RAILWAY_PUBLIC_DOMAIN && 'https://' + process.env.RAILWAY_PUBLIC_DOMAIN || 'http://localhost:5000'}/api/confirm-attendance/${att.confirm_token}`;
-            console.log('[Attendance] About to send attendance confirmation email to:', student.email);
-            const emailHtml = attendanceConfirmationEmail(student.name, date, topicName, null, null, batchInfo.trainer_name, batchInfo.name, confirmLink);
-            sendEmail(student.email, `Attendance Confirmation — ${topicName} — ${date}`, emailHtml).catch(() => {});
+            const confirmLink = `${portalUrl}/api/confirm-attendance/${att.confirm_token}`;
+            const emailHtml = attendanceConfirmationEmail(student.name, date, topicName, null, null, trainerName, batchName, confirmLink);
+            const ok = await sendEmail(student.email, `Attendance Confirmation — ${topicName} — ${date}`, emailHtml);
+            ok ? emailCounts.confirmations++ : emailCounts.failed++;
           } else {
-            console.warn('[Attendance] Skipping confirmation email — no confirm_token in DB');
+            console.warn('[Attendance] No confirm_token in DB for student', rec.student_id);
           }
         } else if (rec.status === 'absent') {
           const mon = date.slice(0, 7);
-          const { c: uninformedCount } = db.prepare(`
-            SELECT COUNT(*) AS c FROM attendance WHERE student_id = ? AND status = 'absent' AND substr(date,1,7) = ?
-          `).get(rec.student_id, mon);
+          const { c: uninformedCount } = db.prepare(
+            `SELECT COUNT(*) AS c FROM attendance WHERE student_id = ? AND status = 'absent' AND substr(date,1,7) = ?`
+          ).get(rec.student_id, mon);
           const MAX_UNINFORMED = 3;
-          console.log('[Attendance] About to send absence alert email to:', student.email);
-          const emailHtml = uninformedAbsentEmail(student.name, date, topicName, batchInfo.trainer_name, batchInfo.name, uninformedCount, MAX_UNINFORMED, uninformedCount >= MAX_UNINFORMED);
-          sendEmail(student.email, `Attendance Alert — Uninformed Absence — ${date}`, emailHtml).catch(() => {});
+          const emailHtml = uninformedAbsentEmail(student.name, date, topicName, trainerName, batchName, uninformedCount, MAX_UNINFORMED, uninformedCount >= MAX_UNINFORMED);
+          const ok = await sendEmail(student.email, `Attendance Alert — Uninformed Absence — ${date}`, emailHtml);
+          ok ? emailCounts.absenceAlerts++ : emailCounts.failed++;
         }
       }
+
+      console.log('[Attendance] Email counts:', JSON.stringify(emailCounts));
     } catch (emailErr) {
-      console.error('[Email] Attendance email error (non-fatal):', emailErr.message, emailErr.stack);
+      console.error('[Email] Attendance email/notif block error (non-fatal):', emailErr.message, emailErr.stack);
     }
 
-    return res.json({ message: 'Attendance marked successfully', date, count: records.length });
+    return res.json({ message: 'Attendance marked successfully', date, count: records.length, emailsSent: emailCounts });
   } catch (err) {
     console.error('Mark attendance error:', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -297,7 +333,7 @@ router.get('/student/my-attendance/:batchId', (req, res) => {
     const batch = db.prepare('SELECT id, name, start_date, end_date FROM batches WHERE id = ?').get(req.params.batchId);
 
     const records = db.prepare(`
-      SELECT date, status
+      SELECT date, status, confirmed_at
       FROM attendance
       WHERE batch_id = ? AND student_id = ?
       ORDER BY date ASC
