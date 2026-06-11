@@ -1,51 +1,53 @@
-const nodemailer = require('nodemailer')
+// Brevo HTTP API — no SMTP, no nodemailer (Railway blocks all outbound SMTP ports)
+const BREVO_API_URL = 'https://api.brevo.com/v3/smtp/email'
 
-// Strip all whitespace from Gmail app password (app passwords have spaces for readability)
-const emailPass = (process.env.EMAIL_PASS || '').replace(/\s/g, '')
-const emailUser = (process.env.EMAIL_USER || '').trim()
+const brevoKey   = (process.env.BREVO_API_KEY  || '').trim()
+const senderEmail = (process.env.EMAIL_USER     || '').trim()
 
-// Debug log at startup so Railway logs show SMTP config state
-console.log('[Email] EMAIL_USER:', emailUser.substring(0, 10) || '(not set)')
-console.log('[Email] EMAIL_PASS length:', emailPass.length)
-console.log('[Email] EMAIL_PASS starts with:', emailPass.substring(0, 5) || '(not set)')
-
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,
-  family: 4,  // Force IPv4 — Railway does not support outbound IPv6
-  auth: {
-    user: emailUser,
-    pass: emailPass,
-  },
-})
-
-// Verify SMTP connection at startup so Railway logs show immediately if creds are wrong
-transporter.verify((err, success) => {
-  if (err) console.error('[Email] SMTP CONNECTION FAILED:', err.message, err.code || '')
-  else     console.log('[Email] SMTP connection verified OK')
-})
+// Startup diagnostics
+console.log('[Email] Using Brevo HTTP API')
+console.log('[Email] BREVO_API_KEY length:', brevoKey.length)
+console.log('[Email] Sender EMAIL_USER:', senderEmail.substring(0, 10) || '(not set)')
 
 async function sendEmail(to, subject, htmlContent) {
-  if (!emailUser || !emailPass) {
-    console.warn('[Email] EMAIL_USER or EMAIL_PASS not configured — skipping send')
+  if (!brevoKey) {
+    console.warn('[Email] BREVO_API_KEY not set — skipping send')
     return
   }
+  if (!senderEmail) {
+    console.warn('[Email] EMAIL_USER (sender address) not set — skipping send')
+    return
+  }
+
   console.log(`[Email] Attempting to send to: ${to} | subject: ${subject}`)
   try {
-    const info = await transporter.sendMail({
-      from: process.env.EMAIL_FROM || `Define Digital Institute <${emailUser}>`,
-      replyTo: process.env.ADMIN_EMAIL || emailUser,
-      to,
-      subject,
-      html: htmlContent,
+    const res = await fetch(BREVO_API_URL, {
+      method: 'POST',
+      headers: {
+        'api-key': brevoKey,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        sender:      { name: 'Define Digital Institute', email: senderEmail },
+        to:          [{ email: to }],
+        subject,
+        htmlContent,
+      }),
     })
-    console.log(`[Email] SENT successfully to: ${to} | messageId: ${info.messageId}`)
+
+    if (res.ok) {
+      const data = await res.json()
+      console.log(`[Email] SENT successfully to: ${to} | messageId: ${data.messageId || '(no id)'}`)
+    } else {
+      const body = await res.text()
+      console.error(`[Email] FAILED to send to: ${to} | subject: ${subject}`)
+      console.error(`[Email] Brevo status: ${res.status} ${res.statusText}`)
+      console.error(`[Email] Brevo response: ${body}`)
+    }
   } catch (err) {
     console.error(`[Email] FAILED to send to: ${to} | subject: ${subject}`)
-    console.error(`[Email] Error message: ${err.message}`)
-    console.error(`[Email] Error code: ${err.code || '(none)'}`)
-    console.error(`[Email] SMTP response: ${err.response || '(none)'}`)
+    console.error(`[Email] Error: ${err.message}`)
     // Never throw — email failure must not crash portal
   }
 }
