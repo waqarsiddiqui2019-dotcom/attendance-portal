@@ -353,13 +353,18 @@ router.get('/student/my-attendance/:batchId', (req, res) => {
       return res.status(404).json({ error: 'Batch not found or you are not enrolled' });
     }
 
-    const batch = db.prepare('SELECT id, name, start_date, end_date FROM batches WHERE id = ?').get(req.params.batchId);
+    const batch = db.prepare(`
+      SELECT b.id, b.name, b.start_date, b.end_date, u.name AS trainer_name
+      FROM batches b JOIN users u ON u.id = b.trainer_id
+      WHERE b.id = ?
+    `).get(req.params.batchId);
 
     const rawRecords = db.prepare(`
-      SELECT date, status, confirmed_at, created_at
-      FROM attendance
-      WHERE batch_id = ? AND student_id = ?
-      ORDER BY date ASC
+      SELECT a.date, a.status, a.confirmed_at, a.created_at, t.title AS topic_title
+      FROM attendance a
+      LEFT JOIN topics t ON t.batch_id = a.batch_id AND t.date = a.date
+      WHERE a.batch_id = ? AND a.student_id = ?
+      ORDER BY a.date ASC
     `).all(batch.id, req.user.id);
 
     const records = rawRecords.map(r => ({

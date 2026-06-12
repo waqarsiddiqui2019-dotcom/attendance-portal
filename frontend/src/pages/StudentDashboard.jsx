@@ -53,6 +53,7 @@ export default function StudentDashboard() {
   const [batches, setBatches] = useState([])
   const [selectedBatchId, setSelectedBatchId] = useState('')
   const [attendance, setAttendance] = useState([])
+  const [batchInfo, setBatchInfo] = useState(null)
   const [loading, setLoading] = useState(true)
   const [attendanceLoading, setAttendanceLoading] = useState(false)
   const [requestedDates, setRequestedDates] = useState(new Set())
@@ -78,7 +79,8 @@ export default function StudentDashboard() {
     setAttendanceLoading(true)
     try {
       const res = await getMyAttendance(batchId)
-      setAttendance(res.data.records || res.data || [])
+      setAttendance(res.data.records || [])
+      setBatchInfo(res.data.batch || null)
     } catch (err) {
       toast.error('Failed to load attendance records')
     } finally {
@@ -87,8 +89,22 @@ export default function StudentDashboard() {
   }, [])
 
   useEffect(() => {
-    if (selectedBatchId) fetchAttendance(selectedBatchId)
+    if (selectedBatchId) {
+      fetchAttendance(selectedBatchId)
+      setRequestedDates(new Set())
+    }
   }, [selectedBatchId, fetchAttendance])
+
+  function getTimeRemaining(createdAt) {
+    if (!createdAt) return null
+    const expiresAt = new Date(new Date(createdAt).getTime() + 24 * 60 * 60 * 1000)
+    const remaining = expiresAt.getTime() - Date.now()
+    if (remaining <= 0) return null
+    const hours = Math.floor(remaining / (1000 * 60 * 60))
+    const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60))
+    const pct = Math.round((remaining / (24 * 60 * 60 * 1000)) * 100)
+    return { hours, minutes, pct }
+  }
 
   const handleRequestReconfirmation = async (record) => {
     setRequestingDate(record.date)
@@ -241,53 +257,74 @@ export default function StudentDashboard() {
         </div>
       ) : (
         <>
-          {/* Pending confirmation banner */}
+          {/* Pending confirmation cards */}
           {pendingConfirmations.length > 0 && (
-            <div className="mb-4 bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4">
-              <div className="flex items-start gap-3">
-                <span className="text-xl leading-none">⏳</span>
-                <div>
-                  <p className="text-sm font-semibold text-amber-800">
-                    {pendingConfirmations.length} attendance record{pendingConfirmations.length !== 1 ? 's' : ''} pending confirmation
-                  </p>
-                  <p className="text-xs text-amber-700 mt-0.5">Check your email and click the confirmation link before it expires in 24 hours.</p>
-                </div>
-              </div>
+            <div className="mb-5 space-y-3">
+              {pendingConfirmations.map(r => {
+                const timeLeft = getTimeRemaining(r.created_at)
+                return (
+                  <div key={r.date} className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-base leading-none">📧</span>
+                      <p className="text-sm font-semibold text-amber-800">Attendance Confirmation Pending</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-amber-700 mb-3">
+                      <span><strong>Date:</strong> {format(parseISO(r.date), 'MMMM d, yyyy')}</span>
+                      <span><strong>Status:</strong> {r.status.charAt(0).toUpperCase() + r.status.slice(1)}</span>
+                      {r.topic_title && <span className="col-span-2"><strong>Topic:</strong> {r.topic_title}</span>}
+                      {batchInfo?.trainer_name && <span className="col-span-2"><strong>Trainer:</strong> {batchInfo.trainer_name}</span>}
+                    </div>
+                    <p className="text-xs text-amber-700 mb-3">✉️ A confirmation email was sent to your registered address. Please check your inbox and click the link.</p>
+                    {timeLeft ? (
+                      <div>
+                        <div className="flex items-center justify-between text-xs text-amber-700 mb-1.5">
+                          <span>⏰ Expires in: <strong>{timeLeft.hours}h {timeLeft.minutes}m</strong></span>
+                          <span>{timeLeft.pct}% remaining</span>
+                        </div>
+                        <div className="h-1.5 bg-amber-200 rounded-full overflow-hidden">
+                          <div className="h-full bg-amber-500 rounded-full" style={{ width: `${timeLeft.pct}%` }} />
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-amber-600 font-medium">⏰ Expires soon</p>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
 
-          {/* Expired confirmation banner */}
+          {/* Expired confirmation cards */}
           {expiredConfirmations.length > 0 && (
-            <div className="mb-4 bg-orange-50 border border-orange-200 rounded-2xl px-5 py-4">
-              <div className="flex items-start gap-3">
-                <span className="text-xl leading-none">⚠️</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-orange-800 mb-2">
-                    {expiredConfirmations.length} confirmation link{expiredConfirmations.length !== 1 ? 's' : ''} expired
-                  </p>
-                  <div className="space-y-2">
-                    {expiredConfirmations.map(r => (
-                      <div key={r.date} className="flex items-center justify-between gap-3">
-                        <span className="text-xs text-orange-700">
-                          {format(parseISO(r.date), 'MMM d, yyyy')} — {r.status.charAt(0).toUpperCase() + r.status.slice(1)}
-                        </span>
-                        {requestedDates.has(r.date) ? (
-                          <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">Re-confirmation Requested ✓</span>
-                        ) : (
-                          <button
-                            onClick={() => handleRequestReconfirmation(r)}
-                            disabled={requestingDate === r.date}
-                            className="flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-lg bg-orange-600 hover:bg-orange-700 text-white disabled:opacity-50 transition"
-                          >
-                            {requestingDate === r.date ? <Loader2 size={11} className="animate-spin" /> : null}
-                            Request Re-confirmation
-                          </button>
-                        )}
-                      </div>
-                    ))}
+            <div className="mb-5 space-y-3">
+              {expiredConfirmations.map(r => (
+                <div key={r.date} className="bg-red-50 border border-red-200 rounded-2xl p-5">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-base leading-none">⚠️</span>
+                    <p className="text-sm font-semibold text-red-800">Confirmation Expired</p>
                   </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-red-700 mb-3">
+                    <span><strong>Date:</strong> {format(parseISO(r.date), 'MMMM d, yyyy')}</span>
+                    <span><strong>Status:</strong> {r.status.charAt(0).toUpperCase() + r.status.slice(1)}</span>
+                    {r.topic_title && <span className="col-span-2"><strong>Topic:</strong> {r.topic_title}</span>}
+                  </div>
+                  <p className="text-xs text-red-700 mb-4">The 24-hour confirmation window has closed. Request re-confirmation from your trainer.</p>
+                  {requestedDates.has(r.date) ? (
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      ✓ Re-confirmation Requested
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => handleRequestReconfirmation(r)}
+                      disabled={requestingDate === r.date}
+                      className="flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 transition"
+                    >
+                      {requestingDate === r.date ? <Loader2 size={14} className="animate-spin" /> : null}
+                      Request Re-confirmation from Trainer
+                    </button>
+                  )}
                 </div>
-              </div>
+              ))}
             </div>
           )}
 

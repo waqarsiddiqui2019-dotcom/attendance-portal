@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import toast from 'react-hot-toast'
-import { getBatch, getCalendarData, getTopics, saveTopic, deleteTopic, toggleTopicComplete } from '../api/index.js'
+import { getBatch, getCalendarData, getTopics, saveTopic, deleteTopic, toggleTopicComplete, getAttendanceByDate, resendConfirmation } from '../api/index.js'
 import { showError } from '../utils/showError.jsx'
 
 // ── Topic form (inline, reused in modal and list) ──────────────────────────
@@ -80,6 +80,9 @@ export default function AttendanceCalendar() {
   const [modalEditing, setModalEditing] = useState(false)
   const [modalSaving, setModalSaving] = useState(false)
   const [modalDeleting, setModalDeleting] = useState(false)
+  const [modalStudents, setModalStudents] = useState(null)
+  const [loadingModalStudents, setLoadingModalStudents] = useState(false)
+  const [resendingModalFor, setResendingModalFor] = useState(null)
   // Topics list section
   const [showTopicList, setShowTopicList] = useState(true)
   const [addingTopic, setAddingTopic] = useState(false)
@@ -173,10 +176,12 @@ export default function AttendanceCalendar() {
     if (month !== currentMonth) setCurrentMonth(month)
   }
 
-  const openModal = (date) => {
+  const openModal = async (date) => {
     const attEvent = events.find(e => e.extendedProps?.date === date)
     const topic = topicsMap[date] || null
+    const hasAttendance = (attEvent?.extendedProps?.total ?? 0) > 0
     setModalEditing(false)
+    setModalStudents(null)
     setDayModal({
       date,
       present: attEvent?.extendedProps?.present ?? null,
@@ -188,6 +193,28 @@ export default function AttendanceCalendar() {
       expired: attEvent?.extendedProps?.expired ?? 0,
       topic,
     })
+    if (hasAttendance) {
+      setLoadingModalStudents(true)
+      try {
+        const res = await getAttendanceByDate(batchId, date)
+        setModalStudents(res.data.records || [])
+      } catch { /* silently ignore — aggregate counts still shown */ }
+      finally { setLoadingModalStudents(false) }
+    }
+  }
+
+  const handleResendFromModal = async (studentId, studentEmail) => {
+    setResendingModalFor(studentId)
+    try {
+      await resendConfirmation({ batchId, studentId, date: dayModal.date })
+      toast.success(`Confirmation resent to ${studentEmail}`)
+      const res = await getAttendanceByDate(batchId, dayModal.date)
+      setModalStudents(res.data.records || [])
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to resend confirmation')
+    } finally {
+      setResendingModalFor(null)
+    }
   }
 
   const handleEventClick = (info) => {
@@ -473,7 +500,7 @@ export default function AttendanceCalendar() {
                 <p className="text-sm text-slate-500 mt-0.5">Class Details</p>
               </div>
               <button
-                onClick={() => { setDayModal(null); setModalEditing(false) }}
+                onClick={() => { setDayModal(null); setModalEditing(false); setModalStudents(null) }}
                 className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 transition"
               >
                 <X size={18} />
@@ -523,6 +550,54 @@ export default function AttendanceCalendar() {
                     </div>
                   )}
                 </div>
+                {/* Per-student details */}
+                {(loadingModalStudents || (modalStudents && modalStudents.some(s => s.status))) && (
+                  <div className="px-6 pb-2 mt-1">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Students</p>
+                    {loadingModalStudents ? (
+                      <div className="flex items-center justify-center py-3">
+                        <Loader2 size={16} className="animate-spin text-slate-400" />
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5 max-h-52 overflow-y-auto pr-0.5">
+                        {modalStudents.filter(s => s.status).map(s => (
+                          <div key={s.student_id} className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-xl flex-wrap">
+                            <div className="w-6 h-6 rounded-full bg-[#1B3A6B]/10 flex items-center justify-center flex-shrink-0">
+                              <span className="text-[#1B3A6B] font-bold text-[10px]">{s.name?.charAt(0)?.toUpperCase()}</span>
+                            </div>
+                            <span className="text-sm font-medium text-slate-700 flex-1 min-w-0 truncate">{s.name}</span>
+                            <span className={`inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full ${
+                              s.status === 'present' ? 'bg-green-100 text-green-800'
+                              : s.status === 'late' ? 'bg-amber-100 text-amber-800'
+                              : 'bg-red-100 text-red-800'
+                            }`}>
+                              {s.status === 'present' ? '✅' : s.status === 'late' ? '🕐' : '❌'} {s.status.charAt(0).toUpperCase() + s.status.slice(1)}
+                            </span>
+                            {s.confirmation_status === 'confirmed' && (
+                              <span className="inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">✓ Confirmed</span>
+                            )}
+                            {s.confirmation_status === 'pending' && (
+                              <span className="inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">⏳ Pending</span>
+                            )}
+                            {s.confirmation_status === 'expired' && (
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200">⚠️ Expired</span>
+                                <button
+                                  onClick={() => handleResendFromModal(s.student_id, s.email)}
+                                  disabled={resendingModalFor === s.student_id}
+                                  className="text-xs font-semibold px-2.5 py-0.5 rounded-lg bg-[#1B3A6B] hover:bg-[#163058] text-white disabled:opacity-50 transition"
+                                >
+                                  {resendingModalFor === s.student_id ? <Loader2 size={10} className="animate-spin inline mr-1" /> : null}
+                                  ↻ Resend
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="mx-6 border-t border-slate-100 my-4" />
               </>
             ) : (
