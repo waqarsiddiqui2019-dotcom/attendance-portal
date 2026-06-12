@@ -26,19 +26,24 @@ export default function OwnerLayout() {
 
   const handleLogout = () => { logout(); navigate('/login') }
 
+  const roleLabel = user?.role === 'co_owner' ? 'Co-Owner' : user?.role === 'admin' ? 'Admin' : 'Owner'
+  const isPrivileged = ['owner', 'co_owner'].includes(user?.role)
+  const p = user?.permissions || {}
+  const can = (flag) => isPrivileged || p[flag] === 1
+
   const navItems = [
-    { to: '/owner/dashboard',       icon: LayoutDashboard, label: 'Dashboard' },
-    { to: '/owner/team',            icon: Users,           label: 'Team',          badge: pendingCount },
-    { to: '/owner/admissions',      icon: ClipboardList,   label: 'Admissions' },
-    { to: '/owner/batches',         icon: BookOpen,        label: 'All Batches' },
-    { to: '/owner/topics-library',  icon: Library,         label: 'Topics Library' },
-    { to: '/owner/calendars',       icon: CalendarDays,    label: 'Calendars' },
-    { to: '/owner/students',        icon: GraduationCap,   label: 'Students' },
-    { to: '/owner/daily-log',       icon: NotebookPen,     label: 'Daily Log' },
-    { to: '/owner/leave-log',       icon: ScrollText,      label: 'Leave Log' },
-    { to: '/owner/messages',        icon: MessageSquare,   label: 'Messages',      badge: msgCount },
-    { to: '/owner/staff',           icon: Shield,          label: 'Staff Roles' },
-  ]
+    { to: '/owner/dashboard',       icon: LayoutDashboard, label: 'Dashboard',      show: true },
+    { to: '/owner/team',            icon: Users,           label: 'Team',           badge: pendingCount, show: can('can_manage_trainers') },
+    { to: '/owner/admissions',      icon: ClipboardList,   label: 'Admissions',     show: can('can_admit_students') },
+    { to: '/owner/batches',         icon: BookOpen,        label: 'All Batches',    show: can('can_manage_batches') },
+    { to: '/owner/topics-library',  icon: Library,         label: 'Topics Library', show: can('can_manage_batches') },
+    { to: '/owner/calendars',       icon: CalendarDays,    label: 'Calendars',      show: can('can_view_reports') },
+    { to: '/owner/students',        icon: GraduationCap,   label: 'Students',       show: can('can_manage_students') },
+    { to: '/owner/daily-log',       icon: NotebookPen,     label: 'Daily Log',      show: can('can_manage_daily_log') },
+    { to: '/owner/leave-log',       icon: ScrollText,      label: 'Leave Log',      show: can('can_approve_leaves') || can('can_view_reports') },
+    { to: '/owner/messages',        icon: MessageSquare,   label: 'Messages',       badge: msgCount, show: can('can_message_all') },
+    { to: '/owner/staff',           icon: Shield,          label: 'Staff Roles',    show: isPrivileged },
+  ].filter(item => item.show)
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
@@ -57,10 +62,10 @@ export default function OwnerLayout() {
             {user?.name?.charAt(0)?.toUpperCase() || 'O'}
           </div>
           <div className="min-w-0">
-            <p className="text-white font-semibold text-sm truncate">{user?.name || 'Owner'}</p>
+            <p className="text-white font-semibold text-sm truncate">{user?.name || roleLabel}</p>
             <span className="inline-block text-xs px-2 py-0.5 rounded-full mt-0.5 font-bold"
               style={{ background: '#F5A623', color: '#1B3A6B' }}>
-              Owner
+              {roleLabel}
             </span>
           </div>
         </div>

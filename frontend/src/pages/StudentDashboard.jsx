@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import toast from 'react-hot-toast'
-import { getMyBatches, getMyAttendance, requestReconfirmation } from '../api/index.js'
+import { getMyBatches, getMyAttendance, requestReconfirmation, getTopics } from '../api/index.js'
 import { useAuth } from '../context/AuthContext.jsx'
 
 const STATUS_CONFIG = {
@@ -54,6 +54,7 @@ export default function StudentDashboard() {
   const [selectedBatchId, setSelectedBatchId] = useState('')
   const [attendance, setAttendance] = useState([])
   const [batchInfo, setBatchInfo] = useState(null)
+  const [topics, setTopics] = useState([])
   const [loading, setLoading] = useState(true)
   const [attendanceLoading, setAttendanceLoading] = useState(false)
   const [requestedDates, setRequestedDates] = useState(new Set())
@@ -78,11 +79,19 @@ export default function StudentDashboard() {
     if (!batchId) return
     setAttendanceLoading(true)
     try {
-      const res = await getMyAttendance(batchId)
-      setAttendance(res.data.records || [])
-      setBatchInfo(res.data.batch || null)
-    } catch (err) {
-      toast.error('Failed to load attendance records')
+      const [attRes, topicsRes] = await Promise.allSettled([
+        getMyAttendance(batchId),
+        getTopics(batchId),
+      ])
+      if (attRes.status === 'fulfilled') {
+        setAttendance(attRes.value.data.records || [])
+        setBatchInfo(attRes.value.data.batch || null)
+      } else {
+        toast.error('Failed to load attendance records')
+      }
+      if (topicsRes.status === 'fulfilled') {
+        setTopics(topicsRes.value.data.topics || [])
+      }
     } finally {
       setAttendanceLoading(false)
     }
@@ -143,22 +152,35 @@ export default function StudentDashboard() {
   const pendingConfirmations = attendance.filter(r => r.confirmation_status === 'pending')
   const expiredConfirmations = attendance.filter(r => r.confirmation_status === 'expired')
 
-  // Calendar events
-  const calendarEvents = attendance
-    .filter((r) => r.date && r.status)
-    .map((r) => {
-      const cfg = STATUS_CONFIG[r.status?.toLowerCase()] || {}
-      const cs = r.confirmation_status
-      const badge = cs === 'confirmed' ? ' ✓' : cs === 'pending' ? ' ⏳' : cs === 'expired' ? ' ⚠️' : ''
-      return {
-        id: r.date,
-        title: `${cfg.label || r.status}${badge}`,
-        start: r.date?.split('T')[0] || r.date,
-        backgroundColor: cfg.calColor || '#CBD5E1',
-        borderColor: cfg.calBorder || '#94A3B8',
-        textColor: '#fff',
-      }
-    })
+  // Calendar events: attendance + topics overlaid
+  const topicsMap = {}
+  topics.forEach(t => { topicsMap[t.date] = t })
+
+  const calendarEvents = [
+    ...attendance
+      .filter((r) => r.date && r.status)
+      .map((r) => {
+        const cfg = STATUS_CONFIG[r.status?.toLowerCase()] || {}
+        const cs = r.confirmation_status
+        const badge = cs === 'confirmed' ? ' ✓' : cs === 'pending' ? ' ⏳' : cs === 'expired' ? ' ⚠️' : ''
+        return {
+          id: `att-${r.date}`,
+          title: `${cfg.label || r.status}${badge}`,
+          start: r.date?.split('T')[0] || r.date,
+          backgroundColor: cfg.calColor || '#CBD5E1',
+          borderColor: cfg.calBorder || '#94A3B8',
+          textColor: '#fff',
+        }
+      }),
+    ...topics.map(t => ({
+      id: `topic-${t.date}`,
+      title: `📚 ${t.title}`,
+      start: t.date,
+      backgroundColor: t.completion_status === 'covered' ? '#059669' : '#1B3A6B',
+      borderColor: t.completion_status === 'covered' ? '#047857' : '#163058',
+      textColor: '#fff',
+    })),
+  ]
 
   const formatDate = (d) => {
     try {
@@ -435,6 +457,9 @@ export default function StudentDashboard() {
                         Date
                       </th>
                       <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">
+                        Topic
+                      </th>
+                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">
                         Status
                       </th>
                       <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">
@@ -452,6 +477,9 @@ export default function StudentDashboard() {
                           <tr key={i} className="hover:bg-slate-50/50">
                             <td className="px-6 py-3.5 text-sm font-medium text-slate-700">
                               {formatDate(record.date)}
+                            </td>
+                            <td className="px-6 py-3.5 text-xs text-slate-500 max-w-[160px] truncate">
+                              {record.topic_title || <span className="text-slate-300">—</span>}
                             </td>
                             <td className="px-6 py-3.5">
                               <span

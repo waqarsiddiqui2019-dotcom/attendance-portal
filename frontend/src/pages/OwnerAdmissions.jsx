@@ -416,12 +416,12 @@ function AdmissionForm({ onSuccess }) {
   const handleFileUpload = async (field, e) => {
     const file = e.target.files[0]
     if (!file) return
-    const maxMb = field === 'id_proof' || field === 'edu_cert' || field === 'other_doc' ? 5 : 2
-    if (file.size > maxMb * 1024 * 1024) { toast.error(`File too large (max ${maxMb}MB)`); return }
+    if (file.size > 5 * 1024 * 1024) { toast.error('File too large (max 5MB)'); return }
     try {
       const data = await fileToBase64(file)
-      set(field, { name: file.name, data })
+      set(field, { name: file.name, data, size: file.size, type: file.type })
     } catch { toast.error('Failed to read file') }
+    e.target.value = ''
   }
 
   const handleSubmit = async () => {
@@ -667,12 +667,25 @@ function AdmissionForm({ onSuccess }) {
                 {[['id_proof','ID Proof (Aadhaar/PAN/Passport)'],['edu_cert','Educational Certificate'],['other_doc','Other Document']].map(([field, label]) => (
                   <Field key={field} label={label}>
                     {form[field] ? (
-                      <div className="flex items-center gap-2 px-3 py-2.5 bg-emerald-50 border border-emerald-200 rounded-xl">
-                        <FileText size={14} className="text-emerald-600 flex-shrink-0" />
-                        <span className="text-xs text-emerald-700 truncate flex-1">{form[field].name}</span>
-                        <button type="button" onClick={() => set(field, null)} className="text-rose-400 hover:text-rose-600">
-                          <X size={13} />
-                        </button>
+                      <div className="border border-slate-200 rounded-xl overflow-hidden">
+                        {form[field].type?.startsWith('image/') ? (
+                          <div className="relative">
+                            <img src={form[field].data} alt={form[field].name} className="w-full h-28 object-cover" />
+                            <div className="absolute bottom-0 left-0 right-0 bg-black/50 px-2 py-1 flex items-center justify-between gap-1">
+                              <span className="text-[10px] text-white truncate flex-1">{form[field].name}</span>
+                              <button type="button" onClick={() => set(field, null)} className="text-white/80 hover:text-white flex-shrink-0"><X size={11} /></button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2.5 px-3 py-3 bg-red-50">
+                            <FileText size={22} className="text-red-500 flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-slate-700 truncate">{form[field].name}</p>
+                              <p className="text-[10px] text-slate-400">{(form[field].size / 1024).toFixed(1)} KB · PDF</p>
+                            </div>
+                            <button type="button" onClick={() => set(field, null)} className="text-rose-400 hover:text-rose-600 flex-shrink-0"><X size={13} /></button>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <label className="flex items-center gap-2 px-3 py-2.5 border border-dashed border-slate-300 rounded-xl cursor-pointer hover:border-primary hover:bg-primary/5 transition">

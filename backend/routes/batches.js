@@ -89,17 +89,22 @@ router.post('/', (req, res) => {
     if (!TRAINER_ROLES.includes(req.user.role)) {
       return res.status(403).json({ error: 'Access denied' });
     }
-    const { name, description, start_date, end_date, mode, sessions_per_week, class_days } = req.body;
+    const { name, description, start_date, end_date, mode, sessions_per_week, class_days, trainer_id } = req.body;
     if (!name || !start_date || !end_date) {
       return res.status(400).json({ error: 'Name, start_date, and end_date are required' });
     }
     const classDaysJson = Array.isArray(class_days) && class_days.length
       ? JSON.stringify(class_days) : null;
 
+    // Owner/admin may specify a trainer_id to assign; trainers always own their own batches
+    const resolvedTrainerId = (OWNER_ROLES.includes(req.user.role) && trainer_id)
+      ? Number(trainer_id)
+      : req.user.id;
+
     const result = db.prepare(`
       INSERT INTO batches (name, description, start_date, end_date, trainer_id, mode, sessions_per_week, class_days)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(name, description || null, start_date, end_date, req.user.id,
+    `).run(name, description || null, start_date, end_date, resolvedTrainerId,
            mode || 'offline', sessions_per_week || null, classDaysJson);
 
     const batch = parseBatch(db.prepare('SELECT * FROM batches WHERE id = ?').get(result.lastInsertRowid));

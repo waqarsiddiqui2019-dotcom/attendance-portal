@@ -5,6 +5,8 @@ const { authenticateToken } = require('../middleware/auth');
 const router = express.Router();
 router.use(authenticateToken);
 
+const OWNER_ROLES = ['owner', 'co_owner', 'admin'];
+
 function getBatchForTrainer(batchId, trainerId) {
   return db.prepare('SELECT * FROM batches WHERE id = ? AND trainer_id = ?').get(batchId, trainerId);
 }
@@ -12,11 +14,26 @@ function getBatchForTrainer(batchId, trainerId) {
 // ── Calendar topics (per-date) ─────────────────────────────────────────────
 
 // GET /api/topics/batch/:batchId?month=YYYY-MM
+// Accessible by: trainer (own batch), owner/admin (any batch), student (enrolled batch)
 router.get('/batch/:batchId', (req, res) => {
   try {
-    if (req.user.role !== 'trainer') return res.status(403).json({ error: 'Trainers only' });
-    const batch = getBatchForTrainer(req.params.batchId, req.user.id);
-    if (!batch) return res.status(404).json({ error: 'Batch not found' });
+    const { role, id } = req.user;
+    let batch;
+
+    if (role === 'trainer') {
+      batch = getBatchForTrainer(req.params.batchId, id);
+      if (!batch) return res.status(404).json({ error: 'Batch not found' });
+    } else if (OWNER_ROLES.includes(role)) {
+      batch = db.prepare('SELECT * FROM batches WHERE id = ?').get(req.params.batchId);
+      if (!batch) return res.status(404).json({ error: 'Batch not found' });
+    } else if (role === 'student') {
+      const enrolled = db.prepare('SELECT id FROM batch_students WHERE batch_id = ? AND student_id = ?').get(req.params.batchId, id);
+      if (!enrolled) return res.status(403).json({ error: 'Not enrolled in this batch' });
+      batch = db.prepare('SELECT * FROM batches WHERE id = ?').get(req.params.batchId);
+      if (!batch) return res.status(404).json({ error: 'Batch not found' });
+    } else {
+      return res.status(403).json({ error: 'Access denied' });
+    }
 
     const { month } = req.query;
     const topics = (month && /^\d{4}-\d{2}$/.test(month))

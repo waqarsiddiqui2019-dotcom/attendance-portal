@@ -188,7 +188,7 @@ export default function Batches() {
     setLoading(true)
     getBatches()
       .then(res => setBatches(res.data.batches || []))
-      .catch(console.error)
+      .catch(err => { console.error(err); toast.error('Failed to load batches') })
       .finally(() => setLoading(false))
   }
 

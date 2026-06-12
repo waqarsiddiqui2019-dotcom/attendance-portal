@@ -114,7 +114,11 @@ router.get('/me', authenticateToken, (req, res) => {
   try {
     const user = db.prepare('SELECT id, name, email, role, status, created_at FROM users WHERE id = ?').get(req.user.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
-    return res.json({ user });
+    let permissions = null;
+    if (user.role === 'admin') {
+      permissions = db.prepare('SELECT * FROM staff_permissions WHERE user_id = ?').get(user.id) || null;
+    }
+    return res.json({ user: { ...user, permissions } });
   } catch (err) {
     console.error('Get me error:', err);
     return res.status(500).json({ error: 'Internal server error' });
