@@ -102,6 +102,9 @@ export const getAttendanceSummary = (batchId) =>
 export const getMyAttendance = (batchId) =>
   api.get(`/attendance/student/my-attendance/${batchId}`)
 
+export const resendConfirmation    = (data) => api.post('/attendance/resend-confirmation', data)
+export const requestReconfirmation = (data) => api.post('/attendance/request-reconfirmation', data)
+
 // ── Calendar Topics ───────────────────────────────────────────────────────────
 export const getTopics = (batchId, month) =>
   api.get(`/topics/batch/${batchId}${month ? `?month=${month}` : ''}`)

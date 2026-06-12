@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import toast from 'react-hot-toast'
-import { getMyBatches, getMyAttendance } from '../api/index.js'
+import { getMyBatches, getMyAttendance, requestReconfirmation } from '../api/index.js'
 import { useAuth } from '../context/AuthContext.jsx'
 
 const STATUS_CONFIG = {
@@ -55,6 +55,8 @@ export default function StudentDashboard() {
   const [attendance, setAttendance] = useState([])
   const [loading, setLoading] = useState(true)
   const [attendanceLoading, setAttendanceLoading] = useState(false)
+  const [requestedDates, setRequestedDates] = useState(new Set())
+  const [requestingDate, setRequestingDate] = useState(null)
 
   // Fetch enrolled batches
   useEffect(() => {
@@ -88,6 +90,24 @@ export default function StudentDashboard() {
     if (selectedBatchId) fetchAttendance(selectedBatchId)
   }, [selectedBatchId, fetchAttendance])
 
+  const handleRequestReconfirmation = async (record) => {
+    setRequestingDate(record.date)
+    try {
+      await requestReconfirmation({ batchId: selectedBatchId, date: record.date })
+      setRequestedDates(prev => new Set([...prev, record.date]))
+      toast.success('Re-confirmation requested. Your trainer will be notified.')
+    } catch (err) {
+      if (err.response?.status === 409) {
+        setRequestedDates(prev => new Set([...prev, record.date]))
+        toast('Re-confirmation already requested', { icon: 'ℹ️' })
+      } else {
+        toast.error(err.response?.data?.error || 'Failed to request re-confirmation')
+      }
+    } finally {
+      setRequestingDate(null)
+    }
+  }
+
   // Compute stats
   const stats = attendance.reduce(
     (acc, r) => {
@@ -104,16 +124,19 @@ export default function StudentDashboard() {
   const percentage =
     total > 0 ? Math.round(((stats.present + stats.late) / total) * 100) : 0
 
+  const pendingConfirmations = attendance.filter(r => r.confirmation_status === 'pending')
+  const expiredConfirmations = attendance.filter(r => r.confirmation_status === 'expired')
+
   // Calendar events
   const calendarEvents = attendance
     .filter((r) => r.date && r.status)
     .map((r) => {
       const cfg = STATUS_CONFIG[r.status?.toLowerCase()] || {}
-      const confirmable = ['present', 'late'].includes(r.status?.toLowerCase())
-      const confirmed   = confirmable && r.confirmed_at
+      const cs = r.confirmation_status
+      const badge = cs === 'confirmed' ? ' ✓' : cs === 'pending' ? ' ⏳' : cs === 'expired' ? ' ⚠️' : ''
       return {
         id: r.date,
-        title: confirmed ? `${cfg.label || r.status} ✓` : (cfg.label || r.status),
+        title: `${cfg.label || r.status}${badge}`,
         start: r.date?.split('T')[0] || r.date,
         backgroundColor: cfg.calColor || '#CBD5E1',
         borderColor: cfg.calBorder || '#94A3B8',
@@ -218,6 +241,56 @@ export default function StudentDashboard() {
         </div>
       ) : (
         <>
+          {/* Pending confirmation banner */}
+          {pendingConfirmations.length > 0 && (
+            <div className="mb-4 bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4">
+              <div className="flex items-start gap-3">
+                <span className="text-xl leading-none">⏳</span>
+                <div>
+                  <p className="text-sm font-semibold text-amber-800">
+                    {pendingConfirmations.length} attendance record{pendingConfirmations.length !== 1 ? 's' : ''} pending confirmation
+                  </p>
+                  <p className="text-xs text-amber-700 mt-0.5">Check your email and click the confirmation link before it expires in 24 hours.</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Expired confirmation banner */}
+          {expiredConfirmations.length > 0 && (
+            <div className="mb-4 bg-orange-50 border border-orange-200 rounded-2xl px-5 py-4">
+              <div className="flex items-start gap-3">
+                <span className="text-xl leading-none">⚠️</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-orange-800 mb-2">
+                    {expiredConfirmations.length} confirmation link{expiredConfirmations.length !== 1 ? 's' : ''} expired
+                  </p>
+                  <div className="space-y-2">
+                    {expiredConfirmations.map(r => (
+                      <div key={r.date} className="flex items-center justify-between gap-3">
+                        <span className="text-xs text-orange-700">
+                          {format(parseISO(r.date), 'MMM d, yyyy')} — {r.status.charAt(0).toUpperCase() + r.status.slice(1)}
+                        </span>
+                        {requestedDates.has(r.date) ? (
+                          <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">Re-confirmation Requested ✓</span>
+                        ) : (
+                          <button
+                            onClick={() => handleRequestReconfirmation(r)}
+                            disabled={requestingDate === r.date}
+                            className="flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-lg bg-orange-600 hover:bg-orange-700 text-white disabled:opacity-50 transition"
+                          >
+                            {requestingDate === r.date ? <Loader2 size={11} className="animate-spin" /> : null}
+                            Request Re-confirmation
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Stats */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             {statCards.map((s) => {
@@ -353,9 +426,13 @@ export default function StudentDashboard() {
                             </td>
                             <td className="px-6 py-3.5">
                               {confirmable ? (
-                                record.confirmed_at ? (
+                                record.confirmation_status === 'confirmed' ? (
                                   <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
                                     <CheckCircle size={11} /> Confirmed
+                                  </span>
+                                ) : record.confirmation_status === 'expired' ? (
+                                  <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-200">
+                                    ⚠️ Expired
                                   </span>
                                 ) : (
                                   <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-200">

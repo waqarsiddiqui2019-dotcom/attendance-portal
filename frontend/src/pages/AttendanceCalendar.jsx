@@ -121,15 +121,22 @@ export default function AttendanceCalendar() {
         const present = item.present_count || 0
         const absent = item.absent_count || 0
         const late = item.late_count || 0
+        const confirmed = item.confirmed_count || 0
+        const pending = item.pending_count || 0
+        const expired = item.expired_count || 0
+        const confirmable = present + late
+        const confirmBadge = confirmable > 0
+          ? (expired > 0 ? ' ⚠️' : pending > 0 ? ' ⏳' : confirmed === confirmable ? ' ✅' : '')
+          : ''
         const isAllPresent = absent === 0 && late === 0 && total > 0
         return {
           id: `att-${item.date}`,
-          title: `P:${present} A:${absent} L:${late}`,
+          title: `P:${present} A:${absent} L:${late}${confirmBadge}`,
           start: item.date,
           backgroundColor: isAllPresent ? '#10B981' : absent > 0 ? '#F43F5E' : '#F59E0B',
           borderColor: isAllPresent ? '#059669' : absent > 0 ? '#E11D48' : '#D97706',
           textColor: '#ffffff',
-          extendedProps: { type: 'attendance', present, absent, late, total, date: item.date },
+          extendedProps: { type: 'attendance', present, absent, late, total, confirmed, pending, expired, date: item.date },
         }
       })
       setEvents(mapped)
@@ -176,6 +183,9 @@ export default function AttendanceCalendar() {
       absent: attEvent?.extendedProps?.absent ?? null,
       late: attEvent?.extendedProps?.late ?? null,
       total: attEvent?.extendedProps?.total ?? null,
+      confirmed: attEvent?.extendedProps?.confirmed ?? 0,
+      pending: attEvent?.extendedProps?.pending ?? 0,
+      expired: attEvent?.extendedProps?.expired ?? 0,
       topic,
     })
   }
@@ -305,9 +315,16 @@ export default function AttendanceCalendar() {
           { color: '#1B3A6B', label: 'Topic (Pending)' },
           { color: '#059669', label: 'Topic (Covered)' },
           { color: '#7C3AED', label: 'Revision Session' },
-        ].map(({ color, label }) => (
+          { emoji: '✅', label: 'All Confirmed' },
+          { emoji: '⏳', label: 'Pending Confirmation' },
+          { emoji: '⚠️', label: 'Confirmation Expired' },
+        ].map(({ color, emoji, label }) => (
           <div key={label} className="flex items-center gap-2">
-            <div className="w-3.5 h-3.5 rounded-sm" style={{ backgroundColor: color }} />
+            {emoji ? (
+              <span className="text-base leading-none">{emoji}</span>
+            ) : (
+              <div className="w-3.5 h-3.5 rounded-sm" style={{ backgroundColor: color }} />
+            )}
             <span className="text-sm text-slate-600">{label}</span>
           </div>
         ))}
@@ -489,6 +506,22 @@ export default function AttendanceCalendar() {
                     <span className="text-slate-500">Total Students</span>
                     <span className="font-semibold text-slate-800">{dayModal.total}</span>
                   </div>
+                  {(dayModal.present + dayModal.late) > 0 && (
+                    <div className="mt-3 bg-slate-50 rounded-xl p-3">
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Confirmation Status</p>
+                      <div className="flex flex-wrap gap-2">
+                        {dayModal.confirmed > 0 && (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">✅ Confirmed: {dayModal.confirmed}</span>
+                        )}
+                        {dayModal.pending > 0 && (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">⏳ Pending: {dayModal.pending}</span>
+                        )}
+                        {dayModal.expired > 0 && (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-200">⚠️ Expired: {dayModal.expired}</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="mx-6 border-t border-slate-100 my-4" />
               </>

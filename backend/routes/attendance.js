@@ -11,6 +11,16 @@ const router = express.Router();
 // All routes require authentication
 router.use(authenticateToken);
 
+// Helper: derive confirmation state from DB fields
+// Old records (created_at IS NULL) → treat as confirmed for backward compatibility
+function confirmationStatus(status, confirmedAt, createdAt) {
+  if (!['present', 'late'].includes(status)) return null;
+  if (confirmedAt) return 'confirmed';
+  if (!createdAt) return 'confirmed';
+  const hoursElapsed = (Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60);
+  return hoursElapsed >= 24 ? 'expired' : 'pending';
+}
+
 // Helper: verify batch belongs to trainer
 function getBatchForTrainer(batchId, trainerId) {
   return db.prepare('SELECT * FROM batches WHERE id = ? AND trainer_id = ?').get(batchId, trainerId);
@@ -44,20 +54,28 @@ router.get('/batch/:batchId/date/:date', (req, res) => {
     const students = getEnrolledStudents(batch.id);
 
     const attendanceRecords = db.prepare(`
-      SELECT student_id, status
+      SELECT student_id, status, confirmed_at, created_at
       FROM attendance
       WHERE batch_id = ? AND date = ?
     `).all(batch.id, date);
 
     const recordMap = {};
-    attendanceRecords.forEach(r => { recordMap[r.student_id] = r.status; });
+    attendanceRecords.forEach(r => { recordMap[r.student_id] = r; });
 
-    const result = students.map(s => ({
-      student_id: s.id,
-      name: s.name,
-      email: s.email,
-      status: recordMap[s.id] || null
-    }));
+    const result = students.map(s => {
+      const rec = recordMap[s.id] || null;
+      const status = rec?.status || null;
+      const confirmedAt = rec?.confirmed_at || null;
+      const createdAt = rec?.created_at || null;
+      return {
+        student_id: s.id,
+        name: s.name,
+        email: s.email,
+        status,
+        confirmed_at: confirmedAt,
+        confirmation_status: status ? confirmationStatus(status, confirmedAt, createdAt) : null,
+      };
+    });
 
     return res.json({ date, batch_id: batch.id, records: result });
   } catch (err) {
@@ -120,8 +138,9 @@ router.post('/batch/:batchId', async (req, res) => {
       `).get(batch.id);
       console.log('[Attendance] batchInfo:', batchInfo ? batchInfo.name : 'NULL');
 
-      const topic = db.prepare('SELECT title FROM topics WHERE batch_id = ? AND date = ?').get(batch.id, date);
+      const topic = db.prepare('SELECT title, notes FROM topics WHERE batch_id = ? AND date = ?').get(batch.id, date);
       const topicName = topic?.title || 'Class Session';
+      const topicNotes = topic?.notes || null;
       const batchName = batchInfo?.name || 'your batch';
       const trainerName = batchInfo?.trainer_name || 'your trainer';
       const portalUrl = process.env.PORTAL_URL
@@ -165,7 +184,7 @@ router.post('/batch/:batchId', async (req, res) => {
           console.log(`[Attendance] confirm_token for student ${rec.student_id}:`, att?.confirm_token || 'NULL');
           if (att?.confirm_token) {
             const confirmLink = `${portalUrl}/api/confirm-attendance/${att.confirm_token}`;
-            const emailHtml = attendanceConfirmationEmail(student.name, date, topicName, null, null, trainerName, batchName, confirmLink);
+            const emailHtml = attendanceConfirmationEmail(student.name, date, topicName, null, null, trainerName, batchName, confirmLink, topicNotes, rec.status);
             const ok = await sendEmail(student.email, `Attendance Confirmation — ${topicName} — ${date}`, emailHtml);
             ok ? emailCounts.confirmations++ : emailCounts.failed++;
           } else {
@@ -177,7 +196,8 @@ router.post('/batch/:batchId', async (req, res) => {
             `SELECT COUNT(*) AS c FROM attendance WHERE student_id = ? AND status = 'absent' AND substr(date,1,7) = ?`
           ).get(rec.student_id, mon);
           const MAX_UNINFORMED = 3;
-          const emailHtml = uninformedAbsentEmail(student.name, date, topicName, trainerName, batchName, uninformedCount, MAX_UNINFORMED, uninformedCount >= MAX_UNINFORMED);
+          const concernLink = `${portalUrl}/leaves`
+          const emailHtml = uninformedAbsentEmail(student.name, date, topicName, trainerName, batchName, uninformedCount, MAX_UNINFORMED, uninformedCount >= MAX_UNINFORMED, concernLink, topicNotes);
           const ok = await sendEmail(student.email, `Attendance Alert — Uninformed Absence — ${date}`, emailHtml);
           ok ? emailCounts.absenceAlerts++ : emailCounts.failed++;
         }
@@ -219,7 +239,10 @@ router.get('/batch/:batchId/calendar', (req, res) => {
         SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) AS present_count,
         SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) AS absent_count,
         SUM(CASE WHEN status = 'late' THEN 1 ELSE 0 END) AS late_count,
-        COUNT(*) AS total
+        COUNT(*) AS total,
+        SUM(CASE WHEN status IN ('present','late') AND (confirmed_at IS NOT NULL OR created_at IS NULL) THEN 1 ELSE 0 END) AS confirmed_count,
+        SUM(CASE WHEN status IN ('present','late') AND confirmed_at IS NULL AND created_at IS NOT NULL AND (julianday('now') - julianday(created_at)) * 24 < 24 THEN 1 ELSE 0 END) AS pending_count,
+        SUM(CASE WHEN status IN ('present','late') AND confirmed_at IS NULL AND created_at IS NOT NULL AND (julianday('now') - julianday(created_at)) * 24 >= 24 THEN 1 ELSE 0 END) AS expired_count
       FROM attendance
       WHERE batch_id = ? AND date LIKE ?
       GROUP BY date
@@ -332,12 +355,17 @@ router.get('/student/my-attendance/:batchId', (req, res) => {
 
     const batch = db.prepare('SELECT id, name, start_date, end_date FROM batches WHERE id = ?').get(req.params.batchId);
 
-    const records = db.prepare(`
-      SELECT date, status, confirmed_at
+    const rawRecords = db.prepare(`
+      SELECT date, status, confirmed_at, created_at
       FROM attendance
       WHERE batch_id = ? AND student_id = ?
       ORDER BY date ASC
     `).all(batch.id, req.user.id);
+
+    const records = rawRecords.map(r => ({
+      ...r,
+      confirmation_status: confirmationStatus(r.status, r.confirmed_at, r.created_at),
+    }));
 
     const present = records.filter(r => r.status === 'present').length;
     const absent = records.filter(r => r.status === 'absent').length;
@@ -654,6 +682,128 @@ router.get('/batch/:batchId/export/pdf', (req, res) => {
     if (!res.headersSent) {
       return res.status(500).json({ error: 'Internal server error' });
     }
+  }
+});
+
+// POST /api/attendance/resend-confirmation
+// Trainer/admin: issue fresh token and resend confirmation email
+router.post('/resend-confirmation', async (req, res) => {
+  try {
+    const allowed = ['trainer', 'owner', 'co_owner', 'admin'];
+    if (!allowed.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+    const { batchId, studentId, date } = req.body;
+    if (!batchId || !studentId || !date) {
+      return res.status(400).json({ error: 'batchId, studentId, date required' });
+    }
+
+    if (req.user.role === 'trainer') {
+      const batch = getBatchForTrainer(batchId, req.user.id);
+      if (!batch) return res.status(404).json({ error: 'Batch not found' });
+    }
+
+    const record = db.prepare(`
+      SELECT a.*, u.name AS student_name, u.email AS student_email,
+             b.name AS batch_name, t.title AS topic_title, t.notes AS topic_notes,
+             trainer.name AS trainer_name
+      FROM attendance a
+      JOIN users u ON u.id = a.student_id
+      JOIN batches b ON b.id = a.batch_id
+      JOIN users trainer ON trainer.id = b.trainer_id
+      LEFT JOIN topics t ON t.batch_id = a.batch_id AND t.date = a.date
+      WHERE a.batch_id = ? AND a.student_id = ? AND a.date = ?
+    `).get(batchId, studentId, date);
+
+    if (!record) return res.status(404).json({ error: 'Attendance record not found' });
+    if (!['present', 'late'].includes(record.status)) {
+      return res.status(400).json({ error: 'Can only resend confirmation for present/late records' });
+    }
+
+    const newToken = crypto.randomUUID();
+    db.prepare(`
+      UPDATE attendance SET confirm_token = ?, confirmed_at = NULL, created_at = datetime('now')
+      WHERE batch_id = ? AND student_id = ? AND date = ?
+    `).run(newToken, batchId, studentId, date);
+
+    const portalUrl = process.env.PORTAL_URL
+      || (process.env.RAILWAY_PUBLIC_DOMAIN ? 'https://' + process.env.RAILWAY_PUBLIC_DOMAIN : 'http://localhost:5000');
+    const confirmLink = `${portalUrl}/api/confirm-attendance/${newToken}`;
+    const emailHtml = attendanceConfirmationEmail(
+      record.student_name, date, record.topic_title || 'Class Session',
+      null, null, record.trainer_name, record.batch_name, confirmLink,
+      record.topic_notes, record.status
+    );
+    const emailSent = await sendEmail(
+      record.student_email,
+      `Re-sent: Attendance Confirmation — ${record.topic_title || 'Class Session'} — ${date}`,
+      emailHtml
+    );
+
+    return res.json({ success: true, message: `Confirmation resent to ${record.student_email}`, emailSent });
+  } catch (err) {
+    console.error('Resend confirmation error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/attendance/request-reconfirmation
+// Student: notify trainer that confirmation link expired and needs resending
+router.post('/request-reconfirmation', (req, res) => {
+  try {
+    if (req.user.role !== 'student') {
+      return res.status(403).json({ error: 'Only students can request re-confirmation' });
+    }
+    const { batchId, date } = req.body;
+    if (!batchId || !date) {
+      return res.status(400).json({ error: 'batchId and date required' });
+    }
+
+    const enrollment = db.prepare('SELECT id FROM batch_students WHERE batch_id = ? AND student_id = ?').get(batchId, req.user.id);
+    if (!enrollment) return res.status(404).json({ error: 'Not enrolled in this batch' });
+
+    const record = db.prepare(`
+      SELECT a.*, b.trainer_id FROM attendance a
+      JOIN batches b ON b.id = a.batch_id
+      WHERE a.batch_id = ? AND a.student_id = ? AND a.date = ?
+    `).get(batchId, req.user.id, date);
+
+    if (!record) return res.status(404).json({ error: 'Attendance record not found' });
+    if (!['present', 'late'].includes(record.status)) {
+      return res.status(400).json({ error: 'Can only request re-confirmation for present/late records' });
+    }
+    if (record.confirmed_at) {
+      return res.status(400).json({ error: 'Attendance already confirmed' });
+    }
+
+    const hoursElapsed = (Date.now() - new Date(record.created_at).getTime()) / (1000 * 60 * 60);
+    if (hoursElapsed < 24) {
+      return res.status(400).json({ error: 'Confirmation link has not expired yet' });
+    }
+
+    const existingRequest = db.prepare(
+      `SELECT id FROM notifications WHERE user_id = ? AND related_type = 'reconfirmation_request' AND related_id = ?`
+    ).get(record.trainer_id, record.id);
+
+    if (existingRequest) {
+      return res.status(409).json({ error: 'Re-confirmation already requested' });
+    }
+
+    const student = db.prepare('SELECT name FROM users WHERE id = ?').get(req.user.id);
+    db.prepare(`
+      INSERT INTO notifications (user_id, title, message, type, related_type, related_id)
+      VALUES (?, ?, ?, 'info', 'reconfirmation_request', ?)
+    `).run(
+      record.trainer_id,
+      `Re-confirmation Request — ${date}`,
+      `${student?.name || 'A student'} has requested re-confirmation for their attendance on ${date}. Please resend their confirmation link.`,
+      record.id
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('Request reconfirmation error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 

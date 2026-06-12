@@ -15,7 +15,7 @@ import {
   getBatch, getStudents, addStudent, removeStudent,
   getAttendanceByDate, markAttendance, getAttendanceSummary,
   getSyllabus, saveSyllabus, distributeTopics, getTopics,
-  toggleBatchStatus, resetStudentPassword,
+  toggleBatchStatus, resetStudentPassword, resendConfirmation,
 } from '../api/index.js'
 import SmartPlanner from '../components/SmartPlanner.jsx'
 import { showError } from '../utils/showError.jsx'
@@ -626,9 +626,11 @@ export default function BatchDetail() {
 
   const [attendanceDate, setAttendanceDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [attendanceData, setAttendanceData] = useState({})
+  const [attendanceConfirmData, setAttendanceConfirmData] = useState({})
   const [attendanceLoaded, setAttendanceLoaded] = useState(false)
   const [loadingAttendance, setLoadingAttendance] = useState(false)
   const [savingAttendance, setSavingAttendance] = useState(false)
+  const [resendingFor, setResendingFor] = useState(null)
 
   const [summary, setSummary] = useState([])
   const [summaryLoading, setSummaryLoading] = useState(false)
@@ -691,9 +693,19 @@ export default function BatchDetail() {
       const res = await getAttendanceByDate(id, attendanceDate)
       const records = res.data.records || []
       const map = {}
+      const confirmMap = {}
       students.forEach(s => (map[s.id] = 'absent'))
-      records.forEach(r => { if (r.student_id && r.status) map[r.student_id] = r.status })
+      records.forEach(r => {
+        if (r.student_id && r.status) {
+          map[r.student_id] = r.status
+          confirmMap[r.student_id] = {
+            confirmation_status: r.confirmation_status,
+            confirmed_at: r.confirmed_at,
+          }
+        }
+      })
       setAttendanceData(map)
+      setAttendanceConfirmData(confirmMap)
       setAttendanceLoaded(true)
     } catch (err) { showError(err, { action: 'load-attendance', page: window.location.pathname }) }
     finally { setLoadingAttendance(false) }
@@ -721,8 +733,22 @@ export default function BatchDetail() {
           style: { fontSize: '13px', maxWidth: '380px' },
         })
       }
+      handleLoadAttendance()
     } catch (err) { showError(err, { action: 'save-attendance', page: window.location.pathname }) }
     finally { setSavingAttendance(false) }
+  }
+
+  const handleResendConfirmation = async (student) => {
+    setResendingFor(student.id)
+    try {
+      await resendConfirmation({ batchId: id, studentId: student.id, date: attendanceDate })
+      toast.success(`New confirmation link sent to ${student.email}`)
+      await handleLoadAttendance()
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to resend confirmation')
+    } finally {
+      setResendingFor(null)
+    }
   }
 
   const exportPDF = () => {
@@ -953,10 +979,13 @@ export default function BatchDetail() {
                   <div className="overflow-x-auto">
                     <table className="w-full">
                       <thead><tr className="bg-slate-50">
-                        {['Student','Status'].map(h => <th key={h} className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">{h}</th>)}
+                        {['Student','Status','Confirmation'].map(h => <th key={h} className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">{h}</th>)}
                       </tr></thead>
                       <tbody className="divide-y divide-slate-100">
-                        {students.map(s => (
+                        {students.map(s => {
+                          const status = attendanceData[s.id] || 'absent'
+                          const confirmInfo = attendanceConfirmData[s.id]
+                          return (
                           <tr key={s.id} className="hover:bg-slate-50/50">
                             <td className="px-6 py-3">
                               <div className="flex items-center gap-3">
@@ -965,10 +994,30 @@ export default function BatchDetail() {
                               </div>
                             </td>
                             <td className="px-6 py-3">
-                              <AttendanceToggle status={attendanceData[s.id]||'absent'} onChange={val => setAttendanceData(p => ({...p,[s.id]:val}))} />
+                              <AttendanceToggle status={status} onChange={val => setAttendanceData(p => ({...p,[s.id]:val}))} />
+                            </td>
+                            <td className="px-6 py-3">
+                              {['present','late'].includes(status) && confirmInfo ? (
+                                confirmInfo.confirmation_status === 'confirmed' ? (
+                                  <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200"><CheckCircle size={11} /> Confirmed</span>
+                                ) : confirmInfo.confirmation_status === 'pending' ? (
+                                  <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-200"><Clock size={11} /> Pending</span>
+                                ) : confirmInfo.confirmation_status === 'expired' ? (
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-200">⚠️ Expired</span>
+                                    <button onClick={() => handleResendConfirmation(s)} disabled={resendingFor === s.id}
+                                      className="flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-lg bg-[#1B3A6B] hover:bg-[#163058] text-white disabled:opacity-50 transition">
+                                      {resendingFor === s.id ? <Loader2 size={11} className="animate-spin" /> : '↻'} Resend
+                                    </button>
+                                  </div>
+                                ) : null
+                              ) : (
+                                <span className="text-xs text-slate-400">—</span>
+                              )}
                             </td>
                           </tr>
-                        ))}
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>

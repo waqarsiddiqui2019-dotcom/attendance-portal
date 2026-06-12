@@ -91,9 +91,12 @@ function baseLayout(bannerBg, bannerHtml, bodyHtml) {
     ${bodyHtml}
   </td></tr>
 
-  <tr><td style="background-color:#f8fafc;border-radius:0 0 12px 12px;border-top:1px solid #e2e8f0;padding:20px 32px;text-align:center;">
-    <p style="margin:0;font-size:12px;color:#64748b;font-weight:600;">Define Digital Institute</p>
-    <p style="margin:8px 0 0;font-size:10px;color:#94a3b8;">This is an automated message from Define Digital Portal. Please do not reply to this email.</p>
+  <tr><td style="background-color:#f8fafc;border-radius:0 0 12px 12px;border-top:3px solid #F97316;padding:24px 32px;text-align:center;">
+    <p style="margin:0 0 2px;font-size:15px;font-weight:bold;"><span style="color:#F97316;">Define</span><span style="color:#1B3A6B;"> Digital Institute</span></p>
+    <p style="margin:0 0 12px;font-size:10px;color:#94a3b8;letter-spacing:0.8px;text-transform:uppercase;">Become a Digital Leader</p>
+    <p style="margin:0 0 12px;font-size:11px;"><a href="mailto:definedigitalinstitute@gmail.com" style="color:#F97316;text-decoration:none;">definedigitalinstitute@gmail.com</a></p>
+    <p style="margin:0 0 10px;font-size:10px;color:#94a3b8;line-height:1.6;">This is an automated notification from Define Digital Institute's Student Portal. Please do not reply directly to this email. For any concerns, please log in to your portal or contact your trainer.</p>
+    <p style="margin:0;font-size:10px;color:#cbd5e1;">© 2026 Define Digital Institute. All rights reserved.</p>
   </td></tr>
 
 </table>
@@ -129,20 +132,23 @@ function greeting(name) {
 
 // ── Template 1 — Attendance Confirmation ──────────────────────────────────────
 
-function attendanceConfirmationEmail(studentName, date, topicName, startTime, endTime, trainerName, batchName, confirmLink) {
+function attendanceConfirmationEmail(studentName, date, topicName, startTime, endTime, trainerName, batchName, confirmLink, topicNotes = null, status = null) {
+  const statusLabel = status ? (status.charAt(0).toUpperCase() + status.slice(1)) : 'Present'
   const banner = `<p style="margin:0;font-size:14px;font-weight:bold;color:#ffffff;">✅ Attendance Recorded — Please Confirm</p>`
+  const detailRows = [
+    ['Date', date],
+    ['Your Status', statusLabel],
+    ['Topic', topicName],
+  ]
+  if (topicNotes) detailRows.push(['Topic Details', topicNotes])
+  detailRows.push(['Batch', batchName], ['Trainer', trainerName])
+  if (startTime && endTime) detailRows.push(['Session Time', `${startTime} – ${endTime}`])
   const body = `
     ${greeting(studentName)}
     <p style="margin:0 0 16px;font-size:14px;color:#475569;">Your attendance has been recorded for the following session. Please click the button below to confirm your attendance.</p>
-    ${detailCard([
-      ['Date', date],
-      ['Topic', topicName],
-      ['Batch', batchName],
-      ['Trainer', trainerName],
-      ['Session Time', startTime && endTime ? `${startTime} – ${endTime}` : 'See schedule'],
-    ])}
+    ${detailCard(detailRows)}
     ${ctaButton('CONFIRM MY ATTENDANCE', confirmLink, '#16a34a')}
-    <p style="margin:16px 0 8px;font-size:12px;color:#64748b;text-align:center;">This confirmation link expires in <strong>24 hours</strong>.</p>
+    <p style="margin:16px 0 8px;font-size:12px;color:#64748b;text-align:center;">⏰ This confirmation link expires in <strong>24 hours</strong>. Please confirm before it expires.</p>
     <p style="margin:0;font-size:12px;color:#94a3b8;text-align:center;">If you did not attend this session, please ignore this email. Your attendance will be automatically recorded after 24 hours.</p>
   `
   return baseLayout('#16a34a', banner, body)
@@ -150,7 +156,7 @@ function attendanceConfirmationEmail(studentName, date, topicName, startTime, en
 
 // ── Template 2 — Uninformed Absence Alert ─────────────────────────────────────
 
-function uninformedAbsentEmail(studentName, date, topicName, trainerName, batchName, absentCountThisMonth, maxAllowed, isLastWarning) {
+function uninformedAbsentEmail(studentName, date, topicName, trainerName, batchName, absentCountThisMonth, maxAllowed, isLastWarning, portalLink = null, topicNotes = null) {
   const ordinal = n => n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`
   const banner = `<p style="margin:0;font-size:14px;font-weight:bold;color:#ffffff;">⚠️ Uninformed Absence Recorded</p>`
   const warningBox = isLastWarning ? `
@@ -158,6 +164,13 @@ function uninformedAbsentEmail(studentName, date, topicName, trainerName, batchN
       <tr><td style="padding:14px 16px;">
         <p style="margin:0;font-size:13px;font-weight:bold;color:#dc2626;">⚠️ FINAL WARNING</p>
         <p style="margin:8px 0 0;font-size:12px;color:#7f1d1d;">You have used all your uninformed leaves for this month. Any further uninformed absence will result in loss of revision session access as per Define Digital attendance policy.</p>
+      </td></tr>
+    </table>` : ''
+  const topicBox = topicNotes ? `
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f0f9ff;border:1px solid #bfdbfe;border-radius:8px;margin:16px 0;">
+      <tr><td style="padding:14px 16px;">
+        <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#1d4ed8;">📚 What was covered today:</p>
+        <p style="margin:0;font-size:13px;color:#1e40af;">${topicNotes}</p>
       </td></tr>
     </table>` : ''
   const body = `
@@ -169,13 +182,21 @@ function uninformedAbsentEmail(studentName, date, topicName, trainerName, batchN
       ['Batch', batchName],
       ['Trainer', trainerName],
     ])}
+    ${topicBox}
     <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#fff7ed;border:1px solid #fed7aa;border-radius:8px;margin:16px 0;">
       <tr><td style="padding:14px 16px;">
         <p style="margin:0;font-size:13px;color:#9a3412;">This is your <strong>${ordinal(absentCountThisMonth)} uninformed absence</strong> this month out of <strong>${maxAllowed} allowed</strong>.</p>
       </td></tr>
     </table>
     ${warningBox}
-    <p style="margin:16px 0 0;font-size:13px;color:#475569;">If you believe this is an error, please contact your trainer <strong>${trainerName}</strong> immediately.</p>
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#fef3c7;border:1px solid #fde68a;border-radius:8px;margin:16px 0;">
+      <tr><td style="padding:14px 16px;">
+        <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#92400e;">⏰ 24-Hour Response Window</p>
+        <p style="margin:0;font-size:12px;color:#78350f;">You have <strong>24 hours</strong> to respond if you have any concerns about this absence record. After 24 hours, this absence will be finalized.</p>
+      </td></tr>
+    </table>
+    ${portalLink ? ctaButton('Report a Concern / Apply for Leave', portalLink, '#2563eb') : ''}
+    <p style="margin:16px 0 0;font-size:13px;color:#475569;">If you believe this is an error, please contact your trainer <strong>${trainerName}</strong> or log in to the portal to raise a concern.</p>
   `
   return baseLayout('#dc2626', banner, body)
 }
